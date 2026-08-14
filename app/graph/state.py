@@ -32,6 +32,13 @@ class AgentState(TypedDict, total=False):
     # Fuentes RAG usadas en el turno (metadata para auditoría)
     rag_sources: list[str]
 
+    # Memoria de largo plazo del usuario inyectada al prompt (bloque de texto)
+    memory_context: str
+
+    # Experiencia aprendida del agente inyectada al prompt (patrones exitosos,
+    # separados de la memoria del usuario — ver app/memory/adaptive.py)
+    experience_context: str
+
     # Clase del modelo que atendió el turno (telemetría)
     provider: str
 

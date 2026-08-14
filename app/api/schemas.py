@@ -62,3 +62,35 @@ class ThreadStateResponse(BaseModel):
     thread_id: str
     message_count: int
     last_message: str | None = None
+
+
+class FeedbackRequest(BaseModel):
+    """Feedback del usuario sobre una respuesta del agente.
+
+    `agent_type_id` + `trigger` + `response` permiten crear/refinar una
+    experiencia aprendida (adaptive memory) sin depender del checkpointer.
+    """
+
+    thread_id: str = Field(min_length=1, description="Conversación evaluada")
+    rating: int = Field(ge=1, le=5, description="Puntuación 1-5")
+    comment: str | None = Field(default=None, max_length=2000)
+    user_id: str | None = None
+    agent_type_id: str | None = Field(
+        default=None,
+        description="Tipo de agente (backend). Si se omite, solo se persiste el feedback.",
+    )
+    trigger: str | None = Field(
+        default=None,
+        description="Mensaje del usuario que disparó la respuesta evaluada.",
+    )
+    response: str | None = Field(
+        default=None,
+        description="Respuesta del agente evaluada.",
+    )
+
+
+class FeedbackResponse(BaseModel):
+    thread_id: str
+    rating: int
+    experience_saved: bool
+    outcome: str | None = None

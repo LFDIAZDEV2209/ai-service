@@ -167,6 +167,7 @@ class AgentRuntimeRegistry:
             model=model,
             system_prompt=runtime_config.effective_system_prompt(),
             tools=tools,
+            enable_memory=runtime_config.memory_config.enabled,
         )
 
         return CompiledAgent(

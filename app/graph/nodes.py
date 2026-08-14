@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import suppress
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
+from langgraph.config import get_config
 from langgraph.prebuilt import ToolNode
 
 from app.agents.prompts import BASE_SYSTEM_PROMPT
 from app.graph.state import AgentState
+from app.memory.adaptive import AdaptiveMemoryService
+from app.memory.service import UserMemoryService
 from app.safety.guardrails import check_input_guardrails
 from app.tools.registry import ALL_TOOLS
 
@@ -63,6 +67,19 @@ def make_agent_node(
             *history,
             HumanMessage(content=state.get("input", "")),
         ]
+
+        # Memoria de largo plazo: se inyecta como mensaje de sistema adicional
+        # cuando el nodo de memoria la cargó (aislamiento por user_id).
+        memory_context = state.get("memory_context")
+        if memory_context:
+            prompt.insert(1, SystemMessage(content=memory_context))
+
+        # Experiencia aprendida del agente: bloque SEPARADO de la memoria del
+        # usuario (pertenece al agente, no al paciente).
+        experience_context = state.get("experience_context")
+        if experience_context:
+            prompt.insert(2, SystemMessage(content=experience_context))
+
         response = await bound_model.ainvoke(prompt)
         return {
             # Persistimos el mensaje del usuario (sanitizado) + la respuesta,
@@ -72,6 +89,133 @@ def make_agent_node(
         }
 
     return agent_node
+
+
+def make_memory_load_node(
+    service_factory: Callable[[], UserMemoryService] | None = None,
+) -> Callable[[AgentState], dict]:
+    """Crea el nodo que carga la memoria del usuario antes del agente.
+
+    Lee `user_id`/`agent_instance_id` del `configurable` de ejecución
+    (propagado por el backend) y `agent_type_id` del estado; si no hay
+    contexto de usuario, el nodo no hace nada (memoria deshabilitada).
+
+    Args:
+        service_factory: fábrica del servicio de memoria (inyectable en tests
+            sin BD); por defecto usa la sesión del engine (`async_session`).
+    """
+
+    async def memory_load_node(state: AgentState) -> dict:
+        configurable = get_config().get("configurable", {})
+        user_id = configurable.get("user_id")
+        agent_type_id = state.get("agent")
+        if not user_id or not agent_type_id:
+            return {}
+
+        service = service_factory() if service_factory is not None else _default_service()
+        try:
+            context = await service.load_context(
+                user_id=user_id,
+                agent_type_id=agent_type_id,
+                agent_instance_id=configurable.get("agent_instance_id"),
+            )
+        except Exception:
+            # La memoria nunca debe tumbar el chat: sin BD → sin memoria.
+            context = ""
+        return {"memory_context": context}
+
+    return memory_load_node
+
+
+def make_memory_save_node(
+    service_factory: Callable[[], UserMemoryService] | None = None,
+) -> Callable[[AgentState], dict]:
+    """Crea el nodo que persiste hechos y resumen tras el turno del agente.
+
+    Extrae hechos declarativos del mensaje del usuario y rota el resumen
+    rodante si el historial lo amerita. Nunca falla el turno por errores de
+    persistencia.
+    """
+
+    async def memory_save_node(state: AgentState) -> dict:
+        configurable = get_config().get("configurable", {})
+        user_id = configurable.get("user_id")
+        agent_type_id = state.get("agent")
+        input_text = state.get("input")
+        if not user_id or not agent_type_id or not input_text:
+            return {}
+
+        service = service_factory() if service_factory is not None else _default_service()
+        with suppress(Exception):
+            await service.extract_and_save(
+                user_id=user_id,
+                agent_type_id=agent_type_id,
+                agent_instance_id=configurable.get("agent_instance_id"),
+                message=input_text,
+            )
+
+        # Historial previo (sin la respuesta del turno) para el resumen rodante.
+        history: list[str] = []
+        for msg in state.get("messages", []):
+            text = getattr(msg, "content", "")
+            if isinstance(text, str) and text:
+                history.append(text)
+
+        with suppress(Exception):
+            last_summary = await service.get_summary(
+                user_id=user_id, agent_type_id=agent_type_id
+            )
+            await service.maybe_roll_summary(
+                user_id=user_id,
+                agent_type_id=agent_type_id,
+                agent_instance_id=configurable.get("agent_instance_id"),
+                history=history,
+                last_summary=last_summary,
+            )
+
+        return {}
+
+    return memory_save_node
+
+def make_experience_load_node(
+    service_factory: Callable[[], AdaptiveMemoryService] | None = None,
+) -> Callable[[AgentState], dict]:
+    """Crea el nodo que inyecta la experiencia aprendida del agente.
+
+    Carga los patrones exitosos y recurrentes del `agent_type_id` actual y los
+    expone en `experience_context` (bloque SEPARADO de `memory_context`: la
+    experiencia pertenece al agente, la memoria al usuario).
+    """
+
+    async def experience_load_node(state: AgentState) -> dict:
+        agent_type_id = state.get("agent")
+        if not agent_type_id:
+            return {}
+
+        service = service_factory() if service_factory is not None else _default_adaptive_service()
+        try:
+            experiences = await service.load_experiences(agent_type_id=agent_type_id)
+            context = service.format_experiences(experiences)
+        except Exception:
+            context = ""
+        return {"experience_context": context}
+
+    return experience_load_node
+
+
+def _default_service() -> UserMemoryService:
+    """Servicio de memoria con sesión corta del engine (producción)."""
+    from app.db.engine import async_session
+    from app.memory.service import UserMemoryService
+
+    return UserMemoryService(async_session())
+
+
+def _default_adaptive_service() -> AdaptiveMemoryService:
+    """Servicio de adaptive memory con sesión corta del engine (producción)."""
+    from app.db.engine import async_session
+
+    return AdaptiveMemoryService(async_session())
 
 
 def make_tools_node(tools: list[BaseTool] | None = None) -> Callable[[AgentState], dict]:

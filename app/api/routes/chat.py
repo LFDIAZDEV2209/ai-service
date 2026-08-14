@@ -14,10 +14,11 @@ from langchain_core.messages import AIMessage, AIMessageChunk
 from app.agents.runtime_registry import AgentRuntimeError
 from app.agents.runtime_registry import registry as runtime_registry
 from app.api.deps import get_db_session, get_graph
-from app.api.schemas import ChatRequest, ChatResponse
+from app.api.schemas import ChatRequest, ChatResponse, FeedbackRequest, FeedbackResponse
 from app.core.config import get_settings
 from app.core.errors import CoppAiError
 from app.core.logging import get_logger
+from app.memory.adaptive import AdaptiveMemoryService
 from app.safety.guardrails import RateLimiter
 
 logger = get_logger(__name__)
@@ -149,6 +150,53 @@ async def chat(
         agent=request.agent or request.agent_type_id or "base",
         tools_used=list(result.get("tools_used", [])),
         model=result.get("provider"),
+    )
+
+
+@router.post("/feedback", response_model=FeedbackResponse)
+async def feedback(
+    request: FeedbackRequest,
+    session=Depends(get_db_session),
+) -> FeedbackResponse:
+    """Registra el feedback del usuario y alimenta la adaptive memory.
+
+    Si vienen `agent_type_id` + `trigger` + `response`, el rating se convierte
+    en una experiencia aprendida (patrón trigger → response con outcome
+    success/error según el rating). El feedback siempre se persiste.
+    """
+    adaptive = AdaptiveMemoryService(session)
+    await adaptive.save_feedback(
+        thread_id=request.thread_id,
+        rating=request.rating,
+        comment=request.comment,
+        user_id=request.user_id,
+    )
+
+    experience_saved = False
+    outcome: str | None = None
+    if request.agent_type_id and request.trigger and request.response:
+        try:
+            experience = await adaptive.save_experience(
+                agent_type_id=request.agent_type_id,
+                version_id=None,
+                trigger=request.trigger,
+                response=request.response,
+                rating=request.rating,
+            )
+            experience_saved = True
+            outcome = experience.outcome
+        except Exception:
+            logger.exception(
+                "No se pudo guardar la experiencia para el agente %s",
+                request.agent_type_id,
+            )
+
+    await session.commit()
+    return FeedbackResponse(
+        thread_id=request.thread_id,
+        rating=request.rating,
+        experience_saved=experience_saved,
+        outcome=outcome,
     )
 
 
