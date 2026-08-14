@@ -80,8 +80,6 @@ ai-service/
 ├── main.py
 ├── pyproject.toml         # uv (fuente de verdad) + requirements.txt (pip/Docker)
 ├── langgraph.json         # Despliegue en LangGraph Platform
-├── Dockerfile
-├── docker-compose.yml     # Postgres local para el checkpointer
 └── .env.example
 ```
 
@@ -146,7 +144,7 @@ Cliente (frontend/UI)
 
 1. **RAG conectado**: indexar documentación real y enrutar al subgrafo `rag_agent`.
 2. **Memoria larga**: migrar a `Store` de LangGraph (preferencias de usuario).
-3. **Postgres**: `docker compose up -d postgres` + `DATABASE_URL` para persistencia real.
+3. **Postgres compartido**: el AI Service usa el mismo PostgreSQL del backend (imagen `pgvector/pgvector:pg18` en el compose raíz del workspace, puerto 5432, db `coppaddresd`) con `DATABASE_URL` en `.env` para persistencia real.
 4. **Subgrafos de negocio**: datos de la API .NET (doctor, psicólogo, CRM) con tools propias.
 5. **Human-in-the-loop**: aprobaciones para acciones sensibles.
 6. **Despliegue**: LangGraph Platform (langgraph.json) o contenedores propios.

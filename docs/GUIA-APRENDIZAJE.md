@@ -172,8 +172,6 @@ ai-service/
 ├── requirements*.txt        # respaldo pip / Docker
 ├── .env.example             # plantilla de variables de entorno
 ├── langgraph.json           # config de despliegue LangGraph Platform
-├── Dockerfile               # imagen del servicio
-├── docker-compose.yml       # Postgres local (para el checkpointer)
 ├── README.md                # vista rápida
 ├── docs/
 │   └── GUIA-APRENDIZAJE.md  # ← este documento
@@ -215,14 +213,6 @@ subas tu `.env` real (está en `.gitignore`).
 ### `langgraph.json`
 Solo lo necesita **LangGraph Platform** (el servicio en la nube de LangChain).
 Declara qué grafo exponer. Localmente no se usa; tu API FastAPI es la dueña.
-
-### `docker-compose.yml`
-Levanta un Postgres local (`docker compose up -d postgres`). Sirve para el
-**checkpointer** cuando configures `DATABASE_URL` (ver `app/memory/checkpointer.py`).
-
-### `Dockerfile`
-Imagen del servicio. Instala `requirements-prod.txt` (solo dependencias de
-producción, sin pytest/httpx) y corre `uvicorn`.
 
 ### `main.py`
 Punto de entrada: crea la app FastAPI (`create_app()`) y permite
@@ -744,10 +734,11 @@ propio estado y publica la respuesta en el padre.
    devuelve el nodo rag. El supervisor ya sabe citar fuentes.
 
 ### ➕ Persistencia real con Postgres
+El AI Service comparte el PostgreSQL del backend (imagen `pgvector/pgvector:pg18`
+en el compose raíz del workspace, puerto 5432, db `coppaddresd`). Solo configura
+`DATABASE_URL` en `.env`:
 ```bash
-docker compose up -d postgres
-# en .env:
-DATABASE_URL=postgresql://coppai:coppai@localhost:5432/coppai
+DATABASE_URL=postgresql://app_user:CoppAddresdDev!2026@localhost:5432/coppaddresd
 ```
 `get_checkpointer()` detecta la URL y usa `PostgresSaver` (crea las tablas
 solas con `setup()`). Los tests siguen pasando porque inyectan `MemorySaver`.

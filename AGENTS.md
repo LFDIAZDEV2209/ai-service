@@ -57,7 +57,13 @@ Subgraphs under `app/graph/subgraphs/` — specialized agents with isolated stat
 ## Gotchas
 
 - **`.env` required**: copy from `.env.example`, add `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
-- **PostgreSQL separate**: this service uses its own Postgres (port 5432, creds: `coppai/coppai/db: coppai`) — don't mix with the .NET backend's Postgres
+- **PostgreSQL shared**: this service shares the backend's single Postgres (image `pgvector/pgvector:pg18` in the workspace root compose, port 5432, db `coppaddresd`, user `app_user` / `CoppAddresdDev!2026`). Do NOT create a second Postgres.
+- **Schema `ai.` + Alembic**: all domain tables live in schema `ai.` (threads, messages, knowledge_chunks [pgvector 1536 + índice HNSW], agent_memories, agent_experiences, agent_feedback, agent_evaluations, agent_executions, agent_runtime_configs). The LangGraph PostgresSaver checkpointer also writes its tables (checkpoints, checkpoint_blobs, ...) into `ai.` (built with a psycopg connection and `options="-c search_path=ai,public"`). Alembic config is in `alembic/` (env.py filters autogenerate to schema `ai` only via `include_object`, so it NEVER touches backend schemas). Commands:
+  ```bash
+  uv run alembic upgrade head          # aplicar migraciones
+  uv run alembic revision --autogenerate -m "desc"   # generar (solo schema ai)
+  ```
+  Models (SQLAlchemy async, `postgresql+psycopg`) live in `app/db/`. Migrations under `alembic/versions/` are excluded from ruff (`per-file-ignores`).
 - **`langgraph.json`**: deployment config for LangGraph Platform
 - **Comments/docs in Spanish** by convention
 

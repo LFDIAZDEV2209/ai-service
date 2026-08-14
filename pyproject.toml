@@ -16,6 +16,9 @@ dependencies = [
     "pydantic-settings>=2.6",
     "numpy>=2.0",
     "psycopg[binary]>=3.2",
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.13",
+    "pgvector>=0.3",
 ]
 
 [dependency-groups]
@@ -33,6 +36,9 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "RUF"]
 ignore = ["B008"]  # B008: Depends() en defaults es patrón estándar de FastAPI
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/versions/*.py" = ["E501", "W291"]  # migraciones autogeneradas por Alembic
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

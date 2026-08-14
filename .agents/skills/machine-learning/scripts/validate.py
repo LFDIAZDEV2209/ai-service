@@ -6,9 +6,9 @@ Category: general
 
 import os
 import sys
-import yaml
-import json
 from pathlib import Path
+
+import yaml
 
 
 def validate_config(config_path: str) -> dict:
@@ -27,7 +27,7 @@ def validate_config(config_path: str) -> dict:
         return {"valid": False, "errors": ["Config file not found"]}
 
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path) as f:
             config = yaml.safe_load(f)
     except yaml.YAMLError as e:
         return {"valid": False, "errors": [f"YAML parse error: {e}"]}
@@ -98,7 +98,7 @@ def main():
     """Main validation entry point."""
     skill_path = Path(__file__).parent.parent
 
-    print(f"Validating machine-learning skill...")
+    print("Validating machine-learning skill...")
     print(f"Path: {skill_path}")
 
     # Validate structure
@@ -121,7 +121,7 @@ def main():
 
     # Summary
     all_valid = structure_result['valid']
-    print(f"\n==================================================")
+    print("\n==================================================")
     print(f"Overall: {'VALID' if all_valid else 'INVALID'}")
 
     return 0 if all_valid else 1

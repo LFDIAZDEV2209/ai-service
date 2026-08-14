@@ -18,14 +18,25 @@ def get_checkpointer():
 
     if settings.database_url:
         try:
+            import psycopg
             from langgraph.checkpoint.postgres import PostgresSaver
+            from psycopg.rows import dict_row
 
-            # Nota: `from_conn_string` abre un pool que vive durante el proceso.
-            # Para cierre explícito usar el patrón context manager:
-            #   with PostgresSaver.from_conn_string(...) as cp: ...
-            checkpointer = PostgresSaver.from_conn_string(settings.database_url)
+            # Las tablas del checkpointer (checkpoints, checkpoint_blobs, ...)
+            # viven en el schema `ai`, junto al resto de tablas del servicio.
+            # Se construye con una conexión psycopg propia (el `search_path` la
+            # hace crear las tablas en `ai`) porque PostgresSaver.from_conn_string
+            # cierra la conexión al salir del context manager y no acepta schema.
+            conn = psycopg.connect(
+                settings.database_url,
+                autocommit=True,
+                prepare_threshold=0,
+                row_factory=dict_row,
+                options="-c search_path=ai,public",
+            )
+            checkpointer = PostgresSaver(conn)
             checkpointer.setup()  # crea las tablas necesarias
-            logger.info("Checkpointer: PostgresSaver (persistencia real)")
+            logger.info("Checkpointer: PostgresSaver (persistencia real, schema ai)")
             return checkpointer
         except Exception as exc:
             logger.error("No se pudo iniciar PostgresSaver: %s", exc)
