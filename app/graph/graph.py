@@ -13,10 +13,11 @@ from __future__ import annotations
 from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 
 from app.agents.prompts import BASE_SYSTEM_PROMPT
-from app.graph.nodes import guardrails_node, make_agent_node, tools_node
+from app.graph.nodes import guardrails_node, make_agent_node, make_tools_node
 from app.graph.state import AgentState
 from app.llm.factory import get_chat_model
 from app.memory.checkpointer import get_checkpointer
@@ -38,6 +39,7 @@ def build_graph(
     model: BaseChatModel | None = None,
     checkpointer: Any = None,
     system_prompt: str = BASE_SYSTEM_PROMPT,
+    tools: list[BaseTool] | None = None,
 ):
     """Construye y compila el grafo supervisor.
 
@@ -45,6 +47,7 @@ def build_graph(
         model: modelo LLM (por defecto: el de la fábrica multi-proveedor).
         checkpointer: checkpointer de LangGraph (por defecto: el de `get_checkpointer()`).
         system_prompt: prompt de sistema del agente principal.
+        tools: tools a exponer al agente; None → todas las registradas.
 
     Returns:
         Grafo compilado (acepta `.invoke`, `.ainvoke`, `.astream`).
@@ -52,8 +55,8 @@ def build_graph(
     workflow = StateGraph(AgentState)
 
     workflow.add_node("guardrails", guardrails_node)
-    workflow.add_node("agent", make_agent_node(model or get_chat_model(), system_prompt))
-    workflow.add_node("tools", tools_node)
+    workflow.add_node("agent", make_agent_node(model or get_chat_model(), system_prompt, tools))
+    workflow.add_node("tools", make_tools_node(tools))
 
     workflow.add_edge(START, "guardrails")
     workflow.add_conditional_edges(

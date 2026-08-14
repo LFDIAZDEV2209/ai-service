@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.tools import BaseTool
 from langgraph.prebuilt import ToolNode
 
 from app.agents.prompts import BASE_SYSTEM_PROMPT
@@ -44,9 +45,16 @@ def guardrails_node(state: AgentState) -> dict:
 def make_agent_node(
     model: BaseChatModel,
     system_prompt: str = BASE_SYSTEM_PROMPT,
+    tools: list[BaseTool] | None = None,
 ) -> Callable[[AgentState], dict]:
-    """Crea el nodo que invoca al LLM con las tools enlazadas (`bind_tools`)."""
-    bound_model = model.bind_tools(ALL_TOOLS)
+    """Crea el nodo que invoca al LLM con las tools enlazadas (`bind_tools`).
+
+    Args:
+        model: modelo de chat a usar.
+        system_prompt: prompt de sistema del agente.
+        tools: tools a exponer al modelo; None → todas las registradas.
+    """
+    bound_model = model.bind_tools(tools or ALL_TOOLS)
 
     async def agent_node(state: AgentState) -> dict:
         history = list(state.get("messages", []))
@@ -66,12 +74,23 @@ def make_agent_node(
     return agent_node
 
 
-def tools_node(state: AgentState) -> dict:
-    """Ejecuta las tools pedidas por el último AIMessage y registra cuáles se usaron."""
-    last = state.get("messages", [None])[-1]
-    tool_names: list[str] = []
-    if last is not None and getattr(last, "tool_calls", None):
-        tool_names = [tc.get("name", "?") for tc in last.tool_calls]
+def make_tools_node(tools: list[BaseTool] | None = None) -> Callable[[AgentState], dict]:
+    """Crea el nodo de ejecución de tools para el subconjunto indicado."""
+    selected = tools or ALL_TOOLS
+    node = ToolNode(selected)
 
-    result = ToolNode(ALL_TOOLS).invoke(state)
-    return {**result, "tools_used": tool_names}
+    def tools_node(state: AgentState) -> dict:
+        last = state.get("messages", [None])[-1]
+        tool_names: list[str] = []
+        if last is not None and getattr(last, "tool_calls", None):
+            tool_names = [tc.get("name", "?") for tc in last.tool_calls]
+
+        result = node.invoke(state)
+        return {**result, "tools_used": tool_names}
+
+    return tools_node
+
+
+def tools_node(state: AgentState) -> dict:
+    """Nodo por defecto con todas las tools registradas."""
+    return make_tools_node()(state)

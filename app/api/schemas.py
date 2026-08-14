@@ -10,6 +10,23 @@ class ChatRequest(BaseModel):
         description="ID de conversación. Si se omite, se crea una nueva.",
     )
     agent: str = Field(default="base", description="Clave del perfil de agente")
+    # Runtime multi-agente (ver app/agents/runtime_registry.py)
+    agent_type_id: str | None = Field(
+        default=None,
+        description="ID del tipo de agente (backend). Si se omite, se usa el perfil `agent`.",
+    )
+    user_id: str | None = Field(
+        default=None,
+        description="ID del usuario (auth.users) para aislar memoria/estado.",
+    )
+    patient_id: str | None = Field(
+        default=None,
+        description="ID del paciente asociado (aisla contexto clínico).",
+    )
+    agent_instance_id: str | None = Field(
+        default=None,
+        description="ID de la instancia de agente asignada al paciente.",
+    )
 
 
 class ChatResponse(BaseModel):

@@ -5,12 +5,15 @@ from __future__ import annotations
 import json
 import threading
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, AIMessageChunk
 
-from app.api.deps import get_graph
+from app.agents.runtime_registry import AgentRuntimeError
+from app.agents.runtime_registry import registry as runtime_registry
+from app.api.deps import get_db_session, get_graph
 from app.api.schemas import ChatRequest, ChatResponse
 from app.core.config import get_settings
 from app.core.errors import CoppAiError
@@ -60,12 +63,51 @@ def _check_rate_limit(request: Request) -> None:
         )
 
 
-def _build_config(thread_id: str) -> dict:
+def _build_config(
+    thread_id: str,
+    request: ChatRequest | None = None,
+    recursion_limit: int | None = None,
+) -> dict:
     settings = get_settings()
+    configurable = {"thread_id": thread_id}
+
+    # Aislamiento multi-agente: el checkpointer y las tools separan el estado
+    # por usuario/paciente/instancia además del thread.
+    if request is not None:
+        if request.user_id:
+            configurable["user_id"] = request.user_id
+        if request.patient_id:
+            configurable["patient_id"] = request.patient_id
+        if request.agent_instance_id:
+            configurable["agent_instance_id"] = request.agent_instance_id
+
     return {
-        "configurable": {"thread_id": thread_id},
-        "recursion_limit": settings.recursion_limit,
+        "configurable": configurable,
+        "recursion_limit": recursion_limit or settings.recursion_limit,
     }
+
+
+async def _resolve_graph(
+    request: ChatRequest,
+    session,
+) -> tuple[Any, int]:
+    """Resuelve el grafo a ejecutar.
+
+    Si `agent_type_id` viene, usa el runtime multi-agente (compilado/cacheado
+    por el registry) y su recursion_limit configurado; si no, el grafo base
+    (perfil `agent`).
+
+    Returns:
+        (graph, recursion_limit)
+    """
+    if request.agent_type_id:
+        try:
+            compiled = await runtime_registry.get_agent(request.agent_type_id, session)
+            return compiled.graph, compiled.runtime_config.recursion_limit
+        except AgentRuntimeError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return None, get_settings().recursion_limit
 
 
 def _extract_answer(state: dict) -> str:
@@ -81,16 +123,21 @@ def _extract_answer(state: dict) -> str:
 async def chat(
     request: ChatRequest,
     http_request: Request,
-    graph=Depends(get_graph),
+    session=Depends(get_db_session),
+    base_graph=Depends(get_graph),
 ) -> ChatResponse:
     """Ejecuta el agente de principio a fin y devuelve la respuesta completa."""
     _check_rate_limit(http_request)
     thread_id = request.thread_id or str(uuid.uuid4())
 
+    graph, recursion_limit = await _resolve_graph(request, session)
+    if graph is None:
+        graph = base_graph
+
     try:
         result = await graph.ainvoke(
-            {"input": request.message, "agent": request.agent},
-            config=_build_config(thread_id),
+            {"input": request.message, "agent": request.agent or request.agent_type_id or "base"},
+            config=_build_config(thread_id, request, recursion_limit),
         )
     except CoppAiError as exc:
         logger.exception("Error ejecutando el grafo")
@@ -99,7 +146,7 @@ async def chat(
     return ChatResponse(
         thread_id=thread_id,
         answer=_extract_answer(result),
-        agent=request.agent,
+        agent=request.agent or request.agent_type_id or "base",
         tools_used=list(result.get("tools_used", [])),
         model=result.get("provider"),
     )
@@ -109,7 +156,8 @@ async def chat(
 async def chat_stream(
     request: ChatRequest,
     http_request: Request,
-    graph=Depends(get_graph),
+    session=Depends(get_db_session),
+    base_graph=Depends(get_graph),
 ) -> StreamingResponse:
     """Streaming del agente vía Server-Sent Events (tokens + nodos en vivo)."""
     _check_rate_limit(http_request)
@@ -118,9 +166,15 @@ async def chat_stream(
     async def event_generator():
         yield "event: start\ndata: {}\n\n"
         try:
+            graph, recursion_limit = await _resolve_graph(request, session)
+            if graph is None:
+                graph = base_graph
+            config = _build_config(thread_id, request, recursion_limit)
+            agent_key = request.agent or request.agent_type_id or "base"
+
             async for mode, chunk in graph.astream(
-                {"input": request.message, "agent": request.agent},
-                config=_build_config(thread_id),
+                {"input": request.message, "agent": agent_key},
+                config=config,
                 stream_mode=["updates", "messages"],
             ):
                 if mode == "messages":

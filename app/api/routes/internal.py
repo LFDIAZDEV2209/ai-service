@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.runtime_registry import registry as runtime_registry
 from app.api.deps import get_db_session
 from app.core.config import get_settings
 from app.db.models import AgentRuntimeConfig
@@ -90,6 +91,10 @@ async def sync_agent_config(
         )
 
     await session.commit()
+
+    # Descarta el grafo cacheado: la próxima ejecución recompila con la
+    # nueva versión activa.
+    runtime_registry.invalidate(payload.agent_type_id)
 
     return AgentConfigSyncResponse(
         agent_type_id=payload.agent_type_id,
