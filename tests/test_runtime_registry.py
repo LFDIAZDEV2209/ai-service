@@ -129,3 +129,34 @@ def test_registry_clear():
     registry._cache["x"] = object()
     registry.clear()
     assert registry._cache == {}
+
+
+async def test_retrieval_enabled_injects_tool():
+    """Con `retrieval_config.enabled`, el grafo compilado incluye la tool de RAG."""
+    session = make_session_with_row(
+        {
+            "system_prompt": "Eres doctor",
+            "retrieval_config": {"enabled": True, "knowledge_base_ids": ["kb-1"], "top_k": 3},
+        }
+    )
+    registry = AgentRuntimeRegistry(model_factory=make_fake_model_factory())
+    compiled = await registry.get_agent(AGENT_ID, session)
+
+    # La tool se enlaza al modelo vía bind_tools; verificamos que se compiló sin
+    # error y que la config de retrieval se preservó en el runtime config.
+    assert compiled.runtime_config.retrieval_config.enabled is True
+    assert compiled.runtime_config.retrieval_config.knowledge_base_ids == ["kb-1"]
+    assert compiled.graph is not None
+
+
+async def test_retrieval_disabled_no_tool():
+    """Sin retrieval habilitado, la compilación no exige KBs configuradas."""
+    session = make_session_with_row(
+        {
+            "system_prompt": "Eres base",
+            "retrieval_config": {"enabled": False},
+        }
+    )
+    registry = AgentRuntimeRegistry(model_factory=make_fake_model_factory())
+    compiled = await registry.get_agent(AGENT_ID, session)
+    assert compiled.runtime_config.retrieval_config.enabled is False

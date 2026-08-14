@@ -19,6 +19,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0",
     "alembic>=1.13",
     "pgvector>=0.3",
+    "pypdf>=5.0",
 ]
 
 [dependency-groups]

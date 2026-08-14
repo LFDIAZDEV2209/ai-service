@@ -57,10 +57,12 @@ class HashEmbeddingsProvider:
     """Embeddings deterministas sin API key — SOLO desarrollo y tests.
 
     Basados en hashing de tokens. No aptos para producción, pero permiten
-    probar el pipeline RAG completo offline.
+    probar el pipeline RAG completo offline. La dimensión por defecto (1536)
+    coincide con la columna `vector` de `ai.knowledge_chunks` para poder
+    insertar en Postgres en entornos de desarrollo sin OpenAI.
     """
 
-    def __init__(self, dimensions: int = 256):
+    def __init__(self, dimensions: int = 1536):
         self.dimensions = dimensions
         self._vocab: dict[str, int] = {}
         self._next_index = 0

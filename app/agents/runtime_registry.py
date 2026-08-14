@@ -26,6 +26,7 @@ from app.db.models import AgentRuntimeConfig as AgentRuntimeConfigRow
 from app.graph.graph import build_graph
 from app.llm.factory import get_chat_model
 from app.tools.registry import TOOLS_BY_NAME
+from app.tools.retrieval import make_retrieve_tool
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +151,17 @@ class AgentRuntimeRegistry:
             ) from exc
 
         tools = self._select_tools(runtime_config.tools, agent_type_id)
+
+        # RAG: si el agente tiene retrieval habilitado, se le inyecta la tool de
+        # recuperación limitada a sus KBs (aislamiento entre agentes).
+        retrieval = runtime_config.retrieval_config
+        if retrieval.enabled:
+            tools.append(
+                make_retrieve_tool(
+                    knowledge_base_ids=retrieval.knowledge_base_ids,
+                    top_k=retrieval.top_k,
+                )
+            )
 
         graph = build_graph(
             model=model,
