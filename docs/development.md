@@ -86,13 +86,25 @@ uv run python -c "from app.core.config import get_settings; s = get_settings(); 
 
 ### Opción 1: Servidor HTTP (recomendado)
 
+> **IMPORTANTE (Windows):** NO usar `uvicorn main:app` directamente. uvicorn
+> 0.36+ fuerza `ProactorEventLoop` en Windows (`uvicorn/loops/asyncio.py`),
+> que es incompatible con psycopg async ("Psycopg cannot use the
+> 'ProactorEventLoop'"). Usar SIEMPRE el runner del repo:
+
 ```bash
-uv run uvicorn main:app --reload
+uv run python run_dev.py
 ```
+
+`run_dev.py` pasa `loop="asyncio:SelectorEventLoop"` a uvicorn (requisito de
+psycopg/SQLAlchemy async). La política `set_event_loop_policy` NO sirve:
+uvicorn la ignora en Windows.
+
+En Linux/macOS el runner usa `loop="auto"` (uvloop si está disponible).
 
 - **URL:** http://localhost:8000
 - **Swagger UI:** http://localhost:8000/docs
-- **ReLoad:** sí (reinicia al cambiar código)
+- **ReLoad:** no (reinicia manualmente tras cambios; `--reload` no funciona
+  con el loop_factory personalizado)
 
 **Probar healthcheck:**
 ```bash
@@ -114,8 +126,13 @@ Respuesta esperada:
 ### Opción 2: Sin recarga (producción local)
 
 ```bash
-uv run uvicorn main:app --host 0.0.0.0 --port 8000
+uv run python run_dev.py   # host 127.0.0.1:8000 (ajustar si se expone)
 ```
+
+> En Windows, si el puerto 8000 ya está ocupado por un proceso viejo del
+> servicio, matarlo antes: `Get-NetTCPConnection -LocalPort 8000` → `Stop-Process`.
+> Un proceso levantado sin `run_dev.py` seguirá fallando con ProactorEventLoop
+> aunque se actualice el código.
 
 ---
 
@@ -417,14 +434,45 @@ curl -N -X POST http://localhost:8000/api/v1/chat/stream \
 
 ---
 
+## Observabilidad (fase 7)
+
+Cada turno de chat registra una ejecución en `ai.agent_executions` (agente,
+versión, modelo, latencia, tokens, tools, fuentes RAG, errores). Consultar:
+
+```bash
+# Listar ejecuciones (por defecto últimos 7 días)
+curl "http://localhost:8000/api/v1/admin/executions"
+
+# Filtros: agent_type_id, user_id, status, from_date, to_date, limit, offset
+curl "http://localhost:8000/api/v1/admin/executions?user_id=user-ana&status=completado"
+
+# Detalle completo (12 preguntas: input/output, feedback, evaluaciones, experiencias)
+curl "http://localhost:8000/api/v1/admin/executions/<execution_id>"
+```
+
+El `execution_id` se devuelve en la respuesta de `/api/v1/chat` y se puede
+enviar con el feedback para vincularlo:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/chat/feedback \
+  -H "Content-Type: application/json" \
+  -d '{"thread_id": "...", "rating": 5, "execution_id": "...", "agent_type_id": "...", "trigger": "...", "response": "..."}'
+```
+
+> Estos endpoints NO tienen auth propia: el backend .NET los expone tras sus
+> permisos (`Agents.View`). En producción el AI Service solo debe escuchar en
+> red interna.
+
+---
+
 ## Estructura de comandos rápidos
 
 ```bash
 # Instalar dependencias
 uv sync
 
-# Ejecutar servidor
-uv run uvicorn main:app --reload
+# Ejecutar servidor (Windows: usar SIEMPRE run_dev.py, ver arriba)
+uv run python run_dev.py
 
 # Probar healthcheck
 curl http://localhost:8000/api/v1/health
@@ -451,13 +499,13 @@ uv run ruff format .
 
 Una vez que el agente funciona correctamente:
 
-1. ✅ Agente base estable (esta fase)
-2. ⏳ Conectar subgrafo RAG (cuando haya documentación real)
-3. ⏳ Agregar perfiles de agentes especializados (doctor, psychologist, etc.)
-4. ⏳ Implementar IntentRouter para clasificar intención
-5. ⏳ Integrar con backend .NET (API REST)
-6. ⏳ Agregar autenticación JWT
-7. ⏳ Migrar a PostgresSaver (producción)
-8. ⏳ Frontend para crear/configurar agentes
+1. ✅ Agente base estable
+2. ✅ Subgrafo RAG (ingest + pgvector + retriever, fases 4)
+3. ✅ Memoria de largo plazo del usuario (fase 5)
+4. ✅ Adaptive memory: feedback → experiencias (fase 6)
+5. ✅ Observabilidad: agent_executions + endpoints admin (fase 7)
+6. ⏳ Frontend admin para crear/configurar agentes + playground
+7. ⏳ Testing integral E2E
+8. ⏳ Hardening de producción (rate limit por usuario, redacción PII)
 
 **Regla principal:** No avanzar a la siguiente fase hasta que la actual esté estable y probada.

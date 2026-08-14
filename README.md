@@ -134,17 +134,23 @@ Cliente (frontend/UI)
 
 | Método | Ruta                       | Descripción                                  |
 | ------ | -------------------------- | -------------------------------------------- |
-| POST   | `/api/v1/chat`             | Respuesta completa del agente                |
+| POST   | `/api/v1/chat`             | Respuesta completa del agente (incluye `execution_id`) |
 | POST   | `/api/v1/chat/stream`      | Streaming SSE (tokens + nodos en vivo)       |
+| POST   | `/api/v1/chat/feedback`    | Feedback 1-5 → experiencia aprendida (adaptive memory) |
 | GET    | `/api/v1/threads/{id}/state` | Historial persistido de una conversación   |
 | POST   | `/api/v1/ingest`           | Indexa docs `.md/.txt` para el RAG           |
+| GET    | `/api/v1/admin/executions` | Lista ejecuciones (filtros + paginación)     |
+| GET    | `/api/v1/admin/executions/{id}` | Detalle completo (12 preguntas del monitoreo) |
 | GET    | `/api/v1/health`           | Healthcheck                                  |
+
+Endpoints internos (backend → AI Service, `X-Internal-Key`): `POST /internal/agents/sync-config`, `POST /internal/agents/ingest`, `DELETE /internal/agents/ingest/{id}`.
 
 ## 🗺️ Roadmap
 
-1. **RAG conectado**: indexar documentación real y enrutar al subgrafo `rag_agent`.
-2. **Memoria larga**: migrar a `Store` de LangGraph (preferencias de usuario).
-3. **Postgres compartido**: el AI Service usa el mismo PostgreSQL del backend (imagen `pgvector/pgvector:pg18` en el compose raíz del workspace, puerto 5432, db `coppaddresd`) con `DATABASE_URL` en `.env` para persistencia real.
-4. **Subgrafos de negocio**: datos de la API .NET (doctor, psicólogo, CRM) con tools propias.
-5. **Human-in-the-loop**: aprobaciones para acciones sensibles.
-6. **Despliegue**: LangGraph Platform (langgraph.json) o contenedores propios.
+1. ✅ **RAG conectado**: ingest (md/txt/PDF) + pgvector + retriever aislado por KB.
+2. ✅ **Memoria usuario**: `agent_memories` con aislamiento estricto + resumen rodante.
+3. ✅ **Postgres compartido**: el AI Service usa el mismo PostgreSQL del backend (imagen `pgvector/pgvector:pg18` en el compose raíz del workspace, puerto 5432, db `coppaddresd`) con `DATABASE_URL` en `.env` para persistencia real.
+4. ✅ **Adaptive memory**: feedback → experiencias del agente + evaluación heurística.
+5. ✅ **Observabilidad**: `agent_executions` (tokens/latencia/fuentes/tools) + endpoints admin.
+6. ⏳ **Frontend admin**: módulo de agentes + playground.
+7. ⏳ **Hardening**: rate limit por usuario, redacción de PII, auditoría.

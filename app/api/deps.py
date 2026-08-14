@@ -1,7 +1,6 @@
 """Dependencias FastAPI."""
 
 from collections.abc import AsyncGenerator
-from functools import lru_cache
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,14 +8,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import ConfigError
 from app.db.engine import async_session
 from app.graph.graph import build_graph
+from app.memory.checkpointer import get_checkpointer
+
+_graph = None
 
 
-@lru_cache(maxsize=1)
-def get_graph():
+async def get_graph():
     """Devuelve el grafo compilado (cacheado; los tests lo sobreescriben vía
-    `app.dependency_overrides`)."""
+    `app.dependency_overrides`).
+
+    Es async porque el checkpointer de producción (`AsyncPostgresSaver`)
+    necesita un event loop abierto para crear su pool de conexiones.
+    """
+    global _graph
+    if _graph is not None:
+        return _graph
+
     try:
-        return build_graph()
+        checkpointer = await get_checkpointer()
+        _graph = build_graph(checkpointer=checkpointer)
+        return _graph
     except ConfigError as exc:
         # Ej: falta la API key del proveedor configurado
         raise HTTPException(

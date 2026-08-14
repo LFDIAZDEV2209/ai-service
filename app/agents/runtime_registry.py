@@ -25,6 +25,7 @@ from app.agents.runtime_config import AgentRuntimeConfig
 from app.db.models import AgentRuntimeConfig as AgentRuntimeConfigRow
 from app.graph.graph import build_graph
 from app.llm.factory import get_chat_model
+from app.memory.checkpointer import get_checkpointer
 from app.tools.registry import TOOLS_BY_NAME
 from app.tools.retrieval import make_retrieve_tool
 
@@ -55,12 +56,17 @@ class AgentRuntimeRegistry:
     def __init__(
         self,
         model_factory: Callable[..., Any] | None = None,
+        checkpointer_factory: Callable[[], Any] | None = None,
     ) -> None:
         """Args:
             model_factory: fábrica de modelos LLM (por defecto `get_chat_model`);
                 inyectable en tests para usar un fake sin API key.
+            checkpointer_factory: fábrica del checkpointer (por defecto
+                `get_checkpointer` — async); inyectable en tests para usar
+                `MemorySaver` sin Postgres.
         """
         self._model_factory = model_factory or get_chat_model
+        self._checkpointer_factory = checkpointer_factory
         self._cache: dict[str, CompiledAgent] = {}
         self._lock = threading.Lock()
 
@@ -168,6 +174,11 @@ class AgentRuntimeRegistry:
             system_prompt=runtime_config.effective_system_prompt(),
             tools=tools,
             enable_memory=runtime_config.memory_config.enabled,
+            checkpointer=(
+                await get_checkpointer()
+                if self._checkpointer_factory is None
+                else self._checkpointer_factory()
+            ),
         )
 
         return CompiledAgent(

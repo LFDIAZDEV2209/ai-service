@@ -5,12 +5,35 @@ from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 
-from app.api.deps import get_graph
+from app.api.deps import get_db_session, get_graph
 from app.api.main import create_app
 from app.graph.graph import build_graph
 from tests.fakes import FakeToolAwareModel
 
 FAKE_ANSWER = "Respuesta de prueba"
+
+
+class FakeDbSession:
+    """Sesión de BD fake: los smoke tests no tocan Postgres.
+
+    El tracker de observabilidad y los nodos de memoria usan la sesión; en
+    los tests solo se verifica que el chat responde, no la persistencia.
+    """
+
+    async def add(self, *args, **kwargs):
+        pass
+
+    async def commit(self):
+        pass
+
+    async def rollback(self):
+        pass
+
+    async def get(self, *args, **kwargs):
+        return None
+
+    async def execute(self, *args, **kwargs):
+        return None
 
 
 @pytest.fixture
@@ -24,6 +47,7 @@ def client():
         return build_graph(model=fake, checkpointer=MemorySaver())
 
     app.dependency_overrides[get_graph] = override
+    app.dependency_overrides[get_db_session] = FakeDbSession
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from langchain_core.messages import AIMessage
+from langgraph.checkpoint.memory import MemorySaver
 
 from app.agents.runtime_config import AgentRuntimeConfig
 from app.agents.runtime_registry import AgentRuntimeError, AgentRuntimeRegistry
@@ -27,6 +28,15 @@ def make_fake_model_factory(**overrides):
         )
 
     return factory
+
+
+def make_registry(**overrides):
+    """Registry con MemorySaver inyectado (los tests no tocan Postgres)."""
+    return AgentRuntimeRegistry(
+        model_factory=make_fake_model_factory(),
+        checkpointer_factory=lambda: MemorySaver(),
+        **overrides,
+    )
 
 
 def make_session_with_row(config: dict) -> AsyncMock:
@@ -83,7 +93,7 @@ def test_runtime_config_overrides():
 
 async def test_get_agent_compila_y_cachea():
     session = make_session_with_row({"system_prompt": "Eres nutricionista"})
-    registry = AgentRuntimeRegistry(model_factory=make_fake_model_factory())
+    registry = make_registry()
 
     first = await registry.get_agent(AGENT_ID, session)
     second = await registry.get_agent(AGENT_ID, session)
@@ -96,7 +106,7 @@ async def test_get_agent_compila_y_cachea():
 
 async def test_invalidate_recompila():
     session = make_session_with_row({"system_prompt": "v1"})
-    registry = AgentRuntimeRegistry(model_factory=make_fake_model_factory())
+    registry = make_registry()
 
     first = await registry.get_agent(AGENT_ID, session)
     registry.invalidate(AGENT_ID)
@@ -110,7 +120,7 @@ async def test_get_agent_sin_fila_levanta_error():
     result.scalar_one_or_none.return_value = None
     session = AsyncMock()
     session.execute.return_value = result
-    registry = AgentRuntimeRegistry(model_factory=make_fake_model_factory())
+    registry = make_registry()
 
     with pytest.raises(AgentRuntimeError, match="no sincronizado"):
         await registry.get_agent(AGENT_ID, session)
@@ -118,14 +128,14 @@ async def test_get_agent_sin_fila_levanta_error():
 
 async def test_tool_desconocida_levanta_error():
     session = make_session_with_row({"tools": ["tool_que_no_existe"]})
-    registry = AgentRuntimeRegistry(model_factory=make_fake_model_factory())
+    registry = make_registry()
 
     with pytest.raises(AgentRuntimeError, match="tool_que_no_existe"):
         await registry.get_agent(AGENT_ID, session)
 
 
 def test_registry_clear():
-    registry = AgentRuntimeRegistry()
+    registry = make_registry()
     registry._cache["x"] = object()
     registry.clear()
     assert registry._cache == {}
@@ -139,7 +149,7 @@ async def test_retrieval_enabled_injects_tool():
             "retrieval_config": {"enabled": True, "knowledge_base_ids": ["kb-1"], "top_k": 3},
         }
     )
-    registry = AgentRuntimeRegistry(model_factory=make_fake_model_factory())
+    registry = make_registry()
     compiled = await registry.get_agent(AGENT_ID, session)
 
     # La tool se enlaza al modelo vía bind_tools; verificamos que se compiló sin
@@ -157,6 +167,6 @@ async def test_retrieval_disabled_no_tool():
             "retrieval_config": {"enabled": False},
         }
     )
-    registry = AgentRuntimeRegistry(model_factory=make_fake_model_factory())
+    registry = make_registry()
     compiled = await registry.get_agent(AGENT_ID, session)
     assert compiled.runtime_config.retrieval_config.enabled is False

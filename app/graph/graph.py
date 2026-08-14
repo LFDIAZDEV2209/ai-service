@@ -30,7 +30,6 @@ from app.graph.nodes import (
 )
 from app.graph.state import AgentState
 from app.llm.factory import get_chat_model
-from app.memory.checkpointer import get_checkpointer
 
 
 def _make_route_after_guardrails(enable_memory: bool) -> Any:
@@ -64,7 +63,9 @@ def build_graph(
 
     Args:
         model: modelo LLM (por defecto: el de la fábrica multi-proveedor).
-        checkpointer: checkpointer de LangGraph (por defecto: el de `get_checkpointer()`).
+        checkpointer: checkpointer de LangGraph (obligatorio en producción;
+            resolverlo vía `await get_checkpointer()` en deps/registry — es
+            async porque AsyncPostgresSaver necesita un loop abierto).
         system_prompt: prompt de sistema del agente principal.
         tools: tools a exponer al agente; None → todas las registradas.
         enable_memory: si True, inserta los nodos de memoria de largo plazo
@@ -106,4 +107,10 @@ def build_graph(
     if enable_memory:
         workflow.add_edge("memory_save", END)
 
-    return workflow.compile(checkpointer=checkpointer or get_checkpointer())
+    if checkpointer is None:
+
+        raise ValueError(
+            "build_graph requiere un checkpointer: resuélvelo con "
+            "`await get_checkpointer()` (async) o pasa MemorySaver en tests."
+        )
+    return workflow.compile(checkpointer=checkpointer)

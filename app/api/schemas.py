@@ -35,6 +35,10 @@ class ChatResponse(BaseModel):
     agent: str = "base"
     tools_used: list[str] = Field(default_factory=list)
     model: str | None = None
+    execution_id: str | None = Field(
+        default=None,
+        description="ID de la ejecución registrada (observabilidad); úsalo para enviar feedback.",
+    )
 
 
 class HealthResponse(BaseModel):
@@ -75,6 +79,10 @@ class FeedbackRequest(BaseModel):
     rating: int = Field(ge=1, le=5, description="Puntuación 1-5")
     comment: str | None = Field(default=None, max_length=2000)
     user_id: str | None = None
+    execution_id: str | None = Field(
+        default=None,
+        description="ID de la ejecución (devuelto por /chat) para vincular el feedback.",
+    )
     agent_type_id: str | None = Field(
         default=None,
         description="Tipo de agente (backend). Si se omite, solo se persiste el feedback.",

@@ -162,9 +162,16 @@ class AdaptiveMemoryService:
         rating: int,
         comment: str | None = None,
         user_id: str | None = None,
+        execution_id: str | None = None,
     ) -> AgentFeedback:
-        """Persiste el feedback explícito del usuario sobre una respuesta."""
+        """Persiste el feedback explícito del usuario sobre una respuesta.
+
+        `execution_id` (si viene) vincula el feedback a la ejecución concreta
+        del grafo, lo que permite a la observabilidad responder "¿el usuario
+        dio feedback positivo o negativo?" por ejecución.
+        """
         feedback = AgentFeedback(
+            execution_id=execution_id,
             thread_id=thread_id,
             user_id=user_id,
             rating=rating,
@@ -172,7 +179,11 @@ class AdaptiveMemoryService:
         )
         self._session.add(feedback)
         logger.info(
-            "Feedback %d/5 registrado (thread %s, user %s)", rating, thread_id, user_id
+            "Feedback %d/5 registrado (thread %s, execution %s, user %s)",
+            rating,
+            thread_id,
+            execution_id,
+            user_id,
         )
         return feedback
 

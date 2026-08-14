@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 import uuid
 from typing import Any
 
@@ -19,6 +20,7 @@ from app.core.config import get_settings
 from app.core.errors import CoppAiError
 from app.core.logging import get_logger
 from app.memory.adaptive import AdaptiveMemoryService
+from app.observability.executions import ExecutionTracker
 from app.safety.guardrails import RateLimiter
 
 logger = get_logger(__name__)
@@ -91,7 +93,7 @@ def _build_config(
 async def _resolve_graph(
     request: ChatRequest,
     session,
-) -> tuple[Any, int]:
+) -> tuple[Any, int, str | None, str | None, str | None]:
     """Resuelve el grafo a ejecutar.
 
     Si `agent_type_id` viene, usa el runtime multi-agente (compilado/cacheado
@@ -99,16 +101,23 @@ async def _resolve_graph(
     (perfil `agent`).
 
     Returns:
-        (graph, recursion_limit)
+        (graph, recursion_limit, version_id, provider, model)
     """
     if request.agent_type_id:
         try:
             compiled = await runtime_registry.get_agent(request.agent_type_id, session)
-            return compiled.graph, compiled.runtime_config.recursion_limit
+            cfg = compiled.runtime_config
+            return (
+                compiled.graph,
+                compiled.runtime_config.recursion_limit,
+                compiled.version_id,
+                cfg.provider,
+                cfg.model,
+            )
         except AgentRuntimeError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    return None, get_settings().recursion_limit
+    return None, get_settings().recursion_limit, None, None, None
 
 
 def _extract_answer(state: dict) -> str:
@@ -131,25 +140,52 @@ async def chat(
     _check_rate_limit(http_request)
     thread_id = request.thread_id or str(uuid.uuid4())
 
-    graph, recursion_limit = await _resolve_graph(request, session)
+    graph, recursion_limit, version_id, provider, model = await _resolve_graph(request, session)
     if graph is None:
         graph = base_graph
 
+    tracker = ExecutionTracker(session)
+    execution_id = await tracker.start(
+        thread_id=thread_id,
+        agent_type_id=request.agent_type_id or request.agent or "base",
+        version_id=version_id,
+        agent_instance_id=request.agent_instance_id,
+        user_id=request.user_id,
+        provider=provider,
+        model=model,
+        message=request.message,
+    )
+    started = time.perf_counter()
     try:
         result = await graph.ainvoke(
             {"input": request.message, "agent": request.agent or request.agent_type_id or "base"},
             config=_build_config(thread_id, request, recursion_limit),
         )
+        await tracker.complete(
+            execution_id,
+            result_state=result,
+            model=model,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+        )
     except CoppAiError as exc:
         logger.exception("Error ejecutando el grafo")
+        await tracker.fail(
+            execution_id,
+            error=str(exc),
+            latency_ms=int((time.perf_counter() - started) * 1000),
+        )
+        await session.commit()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    await session.commit()
 
     return ChatResponse(
         thread_id=thread_id,
         answer=_extract_answer(result),
         agent=request.agent or request.agent_type_id or "base",
         tools_used=list(result.get("tools_used", [])),
-        model=result.get("provider"),
+        model=result.get("provider") or model,
+        execution_id=execution_id,
     )
 
 
@@ -170,6 +206,7 @@ async def feedback(
         rating=request.rating,
         comment=request.comment,
         user_id=request.user_id,
+        execution_id=request.execution_id,
     )
 
     experience_saved = False
@@ -211,20 +248,42 @@ async def chat_stream(
     _check_rate_limit(http_request)
     thread_id = request.thread_id or str(uuid.uuid4())
 
+    graph, recursion_limit, version_id, provider, model = await _resolve_graph(request, session)
+    if graph is None:
+        graph = base_graph
+
+    tracker = ExecutionTracker(session)
+    execution_id = await tracker.start(
+        thread_id=thread_id,
+        agent_type_id=request.agent_type_id or request.agent or "base",
+        version_id=version_id,
+        agent_instance_id=request.agent_instance_id,
+        user_id=request.user_id,
+        provider=provider,
+        model=model,
+        message=request.message,
+    )
+
+    started = time.perf_counter()
+
     async def event_generator():
         yield "event: start\ndata: {}\n\n"
+        final_state: dict | None = None
+        error: str | None = None
         try:
-            graph, recursion_limit = await _resolve_graph(request, session)
-            if graph is None:
-                graph = base_graph
             config = _build_config(thread_id, request, recursion_limit)
             agent_key = request.agent or request.agent_type_id or "base"
 
             async for mode, chunk in graph.astream(
                 {"input": request.message, "agent": agent_key},
                 config=config,
-                stream_mode=["updates", "messages"],
+                stream_mode=["updates", "messages", "values"],
             ):
+                if mode == "values":
+                    # Estado completo tras cada super-step; el último es el final.
+                    if isinstance(chunk, dict):
+                        final_state = chunk
+                    continue
                 if mode == "messages":
                     message_chunk, _metadata = chunk
                     # Solo transmitir tokens de AIMessage/AIMessageChunk, no HumanMessage
@@ -252,9 +311,33 @@ async def chat_stream(
                         yield f"event: node\ndata: {payload}\n\n"
         except Exception as exc:
             logger.exception("Error en el stream del agente")
+            error = str(exc)
             payload = json.dumps({"type": "error", "error": str(exc)}, ensure_ascii=False)
             yield f"event: error\ndata: {payload}\n\n"
-        yield f"event: done\ndata: {json.dumps({'thread_id': thread_id})}\n\n"
+        finally:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            if error is not None:
+                await tracker.fail(execution_id, error=error, latency_ms=latency_ms)
+            elif final_state is not None:
+                await tracker.complete(
+                    execution_id,
+                    result_state=final_state,
+                    model=model,
+                    latency_ms=latency_ms,
+                )
+            else:
+                # Sin estado final (stream interrumpido): se registra como error
+                # de forma conservadora.
+                await tracker.fail(
+                    execution_id,
+                    error="Stream interrumpido sin respuesta final.",
+                    latency_ms=latency_ms,
+                )
+            await session.commit()
+        yield (
+            "event: done\ndata: "
+            f"{json.dumps({'thread_id': thread_id, 'execution_id': execution_id})}\n\n"
+        )
 
     return StreamingResponse(
         event_generator(),
