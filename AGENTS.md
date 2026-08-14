@@ -68,6 +68,7 @@ Subgraphs under `app/graph/subgraphs/` — specialized agents with isolated stat
 - **Memoria usuario** (fase 5): `app/memory/` — `extract.py` (hechos heurísticos), `postgres.py` (UserMemoryStore, aislado por user_id), `service.py` (contexto + resumen rodante). Ver `docs/memory.md`
 - **Adaptive memory** (fase 6): `app/memory/adaptive.py` — feedback → experiencias (upsert por trigger), evaluación heurística; inyecta `experience_context` separado de la memoria del usuario. Ver `docs/adaptive-memory.md`
 - **Observabilidad** (fase 7): `app/observability/executions.py` (ExecutionTracker best-effort) + endpoints admin. Ver `docs/observability.md`
+- **Tools**: `app/tools/builtin.py` — `calculate` valida AST antes de evaluar (el check de exponente se hace sobre el `BinOp` que contiene `Pow`, nunca sobre el operador `Pow` aislado que no tiene `.right`)
 
 ## Gotchas
 

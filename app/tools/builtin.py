@@ -52,8 +52,11 @@ def calculate(expression: str) -> str:
                     raise ValueError("solo se permiten números")
                 if abs(node.value) > 1_000_000:
                     raise ValueError("número demasiado grande")
+            # ast.Pow es el *operador* (aparece como op del BinOp); el check de
+            # exponente se hace sobre el BinOp que lo contiene.
             if (
-                isinstance(node, ast.Pow)
+                isinstance(node, ast.BinOp)
+                and isinstance(node.op, ast.Pow)
                 and isinstance(node.right, ast.Constant)
                 and abs(node.right.value) > 100
             ):
