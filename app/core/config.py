@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     rate_limit_max_requests: int = 10
     rate_limit_window_seconds: int = 60
 
+    # Clave compartida con el backend para endpoints internos (X-Internal-Key)
+    internal_api_key: str = ""
+
     # Memoria
     database_url: str | None = None  # Postgres → checkpointer real; None → MemorySaver
     memory_store_path: str = "./data/memory.json"
