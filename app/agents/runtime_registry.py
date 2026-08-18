@@ -158,10 +158,12 @@ class AgentRuntimeRegistry:
 
         tools = self._select_tools(runtime_config.tools, agent_type_id)
 
-        # RAG: si el agente tiene retrieval habilitado, se le inyecta la tool de
-        # recuperación limitada a sus KBs (aislamiento entre agentes).
+        # RAG: si el agente tiene retrieval habilitado Y KBs explícitas, se le
+        # inyecta la tool de recuperación limitada a sus KBs (aislamiento entre
+        # agentes). `enabled` sin KBs no agrega la tool: un retriever sin filtro
+        # recuperaría chunks de KBs ajenas (globales y privadas de otros).
         retrieval = runtime_config.retrieval_config
-        if retrieval.enabled:
+        if retrieval.enabled and retrieval.knowledge_base_ids:
             tools.append(
                 make_retrieve_tool(
                     knowledge_base_ids=retrieval.knowledge_base_ids,

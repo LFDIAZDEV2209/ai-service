@@ -126,7 +126,18 @@ def _extract_answer(state: dict) -> str:
         return ""
     last = messages[-1]
     content = getattr(last, "content", "")
-    return content if isinstance(content, str) else str(content)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        # Claude devuelve content como lista de bloques ({type: text, text: ...});
+        # se extrae el texto igual que en el streaming para no serializar la
+        # lista cruda (str(lista) mostraba "[{'text': ...}]" en el chat).
+        return "".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    return str(content)
 
 
 @router.post("", response_model=ChatResponse)

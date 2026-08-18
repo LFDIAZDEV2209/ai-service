@@ -196,6 +196,16 @@ class UserMemoryService:
             return None
         return memories[0].content if memories else None
 
+    async def commit(self) -> None:
+        """Persiste las escrituras pendientes de esta sesión.
+
+        Las operaciones de escritura (`extract_and_save`, `maybe_roll_summary`)
+        dejan la transacción abierta a propósito (transacción corta: el llamador
+        decide cuándo persistir); el nodo del grafo que las invoca debe llamar a
+        `commit()` para que los hechos no se pierdan al descartarse la sesión.
+        """
+        await self._session.commit()
+
 
 def _touch_now() -> datetime:
     return datetime.now(UTC)

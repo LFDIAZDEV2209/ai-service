@@ -1,5 +1,7 @@
 """Aplicación FastAPI del servicio de IA."""
 
+import asyncio
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -8,6 +10,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import admin, chat, health, ingest, internal, threads
 from app.core.config import get_settings
 from app.core.logging import setup_logging
+
+# Windows: psycopg async solo funciona con SelectorEventLoop. uvicorn 0.36+
+# fuerza ProactorEventLoop al arrancar, pero cualquier `asyncio.run` interno
+# del proceso usa la policy — fijarla en import evita fallos de psycopg en
+# helpers que crean loops propios.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 @asynccontextmanager

@@ -33,6 +33,17 @@ backend sincronizada en `ai.agent_runtime_configs`). El grafo base (sin
 | `app/memory/service.py` | `UserMemoryService`: orquesta contexto (`load_context`), escritura (`extract_and_save`) y resumen rodante (`maybe_roll_summary`). El resumen usa un `summarizer` LLM inyectable con fallback determinista. |
 | `app/graph/nodes.py` | `make_memory_load_node` / `make_memory_save_node`: nodos LangGraph que leen `configurable` (user_id, agent_instance_id) y el estado (`agent`). Errores de BD se degradan con gracia — la memoria nunca tumba el chat. |
 
+## Commit de escritura (importante)
+
+`extract_and_save` y `maybe_roll_summary` dejan la transacción de su sesión
+abierta a propósito ("transacción corta: el commit lo hace el llamador"). El
+nodo `memory_save` debe llamar `service.commit()` después de cada bloque de
+escritura; si no, la sesión se descarta con los INSERTs pendientes y la BD
+queda vacía (los hechos "se pierden" sin error aparente — se ven conexiones
+`INTRANS` descartadas por el GC en los logs). El nodo actual llama `commit()`
+tras `extract_and_save` y tras `maybe_roll_summary` (cada bloque con su
+`suppress`).
+
 ## Aislamiento (regla de oro)
 
 - Cada `load_context`/`extract_and_save` recibe `user_id` + `agent_type_id`

@@ -69,6 +69,10 @@ Subgraphs under `app/graph/subgraphs/` — specialized agents with isolated stat
 - **Adaptive memory** (fase 6): `app/memory/adaptive.py` — feedback → experiencias (upsert por trigger), evaluación heurística; inyecta `experience_context` separado de la memoria del usuario. Ver `docs/adaptive-memory.md`
 - **Observabilidad** (fase 7): `app/observability/executions.py` (ExecutionTracker best-effort) + endpoints admin. Ver `docs/observability.md`
 - **Tools**: `app/tools/builtin.py` — `calculate` valida AST antes de evaluar (el check de exponente se hace sobre el `BinOp` que contiene `Pow`, nunca sobre el operador `Pow` aislado que no tiene `.right`)
+- **Nodos async**: todos los factories del grafo (`make_agent_node`, `make_tools_node`, `make_memory_load_node`, `make_memory_save_node`, `make_experience_load_node`) devuelven callables `async` (`Callable[[AgentState], Awaitable[dict]]`). Un wrapper síncrono sobre un `ToolNode` falla con `StructuredTool does not support sync invocation` (PregelNode ejecuta la ruta sync de `__call__`). Usar `await node.ainvoke(state)`.
+- **RAG con aislamiento**: la tool `retrieve_knowledge` solo se enlaza si `retrieval.enabled` Y `retrieval.knowledge_base_ids` NO vacío (`runtime_registry.py`). Sin ids explícitos el retriever no filtra y filtraría KBs de otros agentes — nunca desactivar ese check.
+- **Memoria**: `UserMemoryService.extract_and_save` / `maybe_roll_summary` dejan la transacción abierta a propósito ("commit by caller"); el nodo `memory_save` DEBE llamar `service.commit()` tras cada bloque o las escrituras se descartan en silencio (conexiones INTRANS abandonadas por el GC, BD vacía sin error). El endpoint de feedback ya commitea (chat.py).
+- **Respuesta de chat**: `_extract_answer` en `app/api/routes/chat.py` extrae el texto del último AIMessage (ignora bloques `text` huérfanos de tool_use) — si LangGraph cambia el formato de `answer`, ajustar ahí.
 
 ## Gotchas
 

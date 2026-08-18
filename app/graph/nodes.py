@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import suppress
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -50,7 +50,7 @@ def make_agent_node(
     model: BaseChatModel,
     system_prompt: str = BASE_SYSTEM_PROMPT,
     tools: list[BaseTool] | None = None,
-) -> Callable[[AgentState], dict]:
+) -> Callable[[AgentState], Awaitable[dict]]:
     """Crea el nodo que invoca al LLM con las tools enlazadas (`bind_tools`).
 
     Args:
@@ -93,7 +93,7 @@ def make_agent_node(
 
 def make_memory_load_node(
     service_factory: Callable[[], UserMemoryService] | None = None,
-) -> Callable[[AgentState], dict]:
+) -> Callable[[AgentState], Awaitable[dict]]:
     """Crea el nodo que carga la memoria del usuario antes del agente.
 
     Lee `user_id`/`agent_instance_id` del `configurable` de ejecución
@@ -129,7 +129,7 @@ def make_memory_load_node(
 
 def make_memory_save_node(
     service_factory: Callable[[], UserMemoryService] | None = None,
-) -> Callable[[AgentState], dict]:
+) -> Callable[[AgentState], Awaitable[dict]]:
     """Crea el nodo que persiste hechos y resumen tras el turno del agente.
 
     Extrae hechos declarativos del mensaje del usuario y rota el resumen
@@ -153,6 +153,9 @@ def make_memory_save_node(
                 agent_instance_id=configurable.get("agent_instance_id"),
                 message=input_text,
             )
+            # El servicio deja la transacción abierta (commit del llamador);
+            # si no se persiste aquí, la sesión se descarta sin guardar nada.
+            await service.commit()
 
         # Historial previo (sin la respuesta del turno) para el resumen rodante.
         history: list[str] = []
@@ -172,6 +175,8 @@ def make_memory_save_node(
                 history=history,
                 last_summary=last_summary,
             )
+            # Persiste también el resumen rodante si se rotó (transacción corta).
+            await service.commit()
 
         return {}
 
@@ -179,7 +184,7 @@ def make_memory_save_node(
 
 def make_experience_load_node(
     service_factory: Callable[[], AdaptiveMemoryService] | None = None,
-) -> Callable[[AgentState], dict]:
+) -> Callable[[AgentState], Awaitable[dict]]:
     """Crea el nodo que inyecta la experiencia aprendida del agente.
 
     Carga los patrones exitosos y recurrentes del `agent_type_id` actual y los
@@ -218,23 +223,31 @@ def _default_adaptive_service() -> AdaptiveMemoryService:
     return AdaptiveMemoryService(async_session())
 
 
-def make_tools_node(tools: list[BaseTool] | None = None) -> Callable[[AgentState], dict]:
-    """Crea el nodo de ejecución de tools para el subconjunto indicado."""
+def make_tools_node(tools: list[BaseTool] | None = None) -> Callable[[AgentState], Awaitable[dict]]:
+    """Crea el nodo de ejecución de tools para el subconjunto indicado.
+
+    El wrapper es async a propósito: el `ToolNode` interno es un
+    `RunnableCallable` cuyo `__call__` es síncrono; si se expone así, PregelNode
+    lo ejecuta por la ruta sync (`_execute_tool_sync`) y las tools async
+    (p. ej. `retrieve_knowledge`) fallan con "StructuredTool does not support
+    sync invocation". Con `ainvoke` se usa `_execute_tool_async` y las tools
+    coroutine funcionan.
+    """
     selected = tools or ALL_TOOLS
     node = ToolNode(selected)
 
-    def tools_node(state: AgentState) -> dict:
+    async def tools_node(state: AgentState) -> dict:
         last = state.get("messages", [None])[-1]
         tool_names: list[str] = []
         if last is not None and getattr(last, "tool_calls", None):
             tool_names = [tc.get("name", "?") for tc in last.tool_calls]
 
-        result = node.invoke(state)
+        result = await node.ainvoke(state)
         return {**result, "tools_used": tool_names}
 
     return tools_node
 
 
-def tools_node(state: AgentState) -> dict:
+async def tools_node(state: AgentState) -> dict:
     """Nodo por defecto con todas las tools registradas."""
-    return make_tools_node()(state)
+    return await make_tools_node()(state)
