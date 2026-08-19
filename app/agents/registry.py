@@ -9,7 +9,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.agents.prompts import BASE_SYSTEM_PROMPT
+from app.agents.prompts import (
+    BASE_SYSTEM_PROMPT,
+    MEDICAL_SYSTEM_PROMPT,
+    NUTRITION_SYSTEM_PROMPT,
+    PSYCHOLOGY_SYSTEM_PROMPT,
+)
 
 
 @dataclass(frozen=True)
@@ -30,11 +35,24 @@ AGENTS: dict[str, AgentProfile] = {
         description="Agente base de conversación con herramientas genéricas.",
         system_prompt=BASE_SYSTEM_PROMPT,
     ),
-    # ── Especializados (cuando exista la lógica de negocio) ──────────────
-    # "rag":      AgentProfile(key="rag", name="Documentación", ...),
-    # "doctor":   AgentProfile(key="doctor", name="Asistente médico", ...),
-    # "psychologist": AgentProfile(key="psychologist", ...),
-    # "crm":      AgentProfile(key="crm", name="CRM / datos", ...),
+    "nutrition": AgentProfile(
+        key="nutrition",
+        name="Especialista en Nutrición",
+        description="Responde consultas sobre alimentación, dietas y nutrición.",
+        system_prompt=NUTRITION_SYSTEM_PROMPT,
+    ),
+    "medical": AgentProfile(
+        key="medical",
+        name="Especialista en Salud",
+        description="Responde consultas generales de salud y síntomas.",
+        system_prompt=MEDICAL_SYSTEM_PROMPT,
+    ),
+    "psychology": AgentProfile(
+        key="psychology",
+        name="Especialista en Salud Mental",
+        description="Responde consultas de bienestar emocional y salud mental.",
+        system_prompt=PSYCHOLOGY_SYSTEM_PROMPT,
+    ),
 }
 
 
