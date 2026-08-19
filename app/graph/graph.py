@@ -58,6 +58,7 @@ def build_graph(
     system_prompt: str = BASE_SYSTEM_PROMPT,
     tools: list[BaseTool] | None = None,
     enable_memory: bool = False,
+    profile_resolver: Any | None = None,
 ):
     """Construye y compila el grafo supervisor.
 
@@ -66,18 +67,23 @@ def build_graph(
         checkpointer: checkpointer de LangGraph (obligatorio en producción;
             resolverlo vía `await get_checkpointer()` en deps/registry — es
             async porque AsyncPostgresSaver necesita un loop abierto).
-        system_prompt: prompt de sistema del agente principal.
+        system_prompt: prompt de sistema del agente principal (por defecto).
         tools: tools a exponer al agente; None → todas las registradas.
         enable_memory: si True, inserta los nodos de memoria de largo plazo
             (load antes del agente, save después del turno).
-
+        profile_resolver: opcional. Callable que recibe el estado y devuelve el
+            `AgentProfile` activo (routing por intención). Si se omite, el
+            agente usa siempre `system_prompt`/`tools` (perfil `base`).
     Returns:
         Grafo compilado (acepta `.invoke`, `.ainvoke`, `.astream`).
     """
     workflow = StateGraph(AgentState)
 
     workflow.add_node("guardrails", guardrails_node)
-    workflow.add_node("agent", make_agent_node(model or get_chat_model(), system_prompt, tools))
+    workflow.add_node(
+        "agent",
+        make_agent_node(model or get_chat_model(), system_prompt, tools, profile_resolver),
+    )
     workflow.add_node("tools", make_tools_node(tools))
 
     if enable_memory:

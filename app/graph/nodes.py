@@ -12,6 +12,7 @@ from langgraph.config import get_config
 from langgraph.prebuilt import ToolNode
 
 from app.agents.prompts import BASE_SYSTEM_PROMPT
+from app.agents.registry import AgentProfile
 from app.graph.state import AgentState
 from app.memory.adaptive import AdaptiveMemoryService
 from app.memory.service import UserMemoryService
@@ -50,20 +51,34 @@ def make_agent_node(
     model: BaseChatModel,
     system_prompt: str = BASE_SYSTEM_PROMPT,
     tools: list[BaseTool] | None = None,
+    profile_resolver: Callable[[AgentState], Awaitable[AgentProfile | None]] | None = None,
 ) -> Callable[[AgentState], Awaitable[dict]]:
     """Crea el nodo que invoca al LLM con las tools enlazadas (`bind_tools`).
 
     Args:
         model: modelo de chat a usar.
-        system_prompt: prompt de sistema del agente.
+        system_prompt: prompt de sistema por defecto (se usa si no hay
+            `profile_resolver` o el perfil resuelto no trae prompt propio).
         tools: tools a exponer al modelo; None → todas las registradas.
+        profile_resolver: opcional. Callable ASYNC que devuelve el
+            `AgentProfile` activo para el estado actual (routing por intención).
+            Permite que el nodo cambie de "sombrero" (prompt/tools del perfil)
+            en cada turno, leyendo la config de la BD cuando corresponda.
+
+    Returns:
+        Callable async que ejecuta un turno del agente.
     """
-    bound_model = model.bind_tools(tools or ALL_TOOLS)
 
     async def agent_node(state: AgentState) -> dict:
+        # Resolución del perfil activo: el precedente gana sobre el default.
+        profile = await profile_resolver(state) if profile_resolver else None
+        active_prompt = profile.system_prompt if profile else system_prompt
+        active_tools = profile.tools if profile and profile.tools else (tools or ALL_TOOLS)
+        active_model = model.bind_tools(list(active_tools))
+
         history = list(state.get("messages", []))
         prompt = [
-            SystemMessage(content=system_prompt),
+            SystemMessage(content=active_prompt),
             *history,
             HumanMessage(content=state.get("input", "")),
         ]
@@ -80,12 +95,13 @@ def make_agent_node(
         if experience_context:
             prompt.insert(2, SystemMessage(content=experience_context))
 
-        response = await bound_model.ainvoke(prompt)
+        response = await active_model.ainvoke(prompt)
         return {
             # Persistimos el mensaje del usuario (sanitizado) + la respuesta,
             # para que el checkpointer conserve el historial completo.
             "messages": [HumanMessage(content=state.get("input", "")), response],
             "provider": model.__class__.__name__,
+            "agent": profile.key if profile else state.get("agent", "base"),
         }
 
     return agent_node

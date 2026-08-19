@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import admin, chat, health, ingest, internal, threads
+from app.api.routes import admin, agents, chat, health, ingest, internal, threads
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 
@@ -50,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix=prefix)
     app.include_router(chat.router, prefix=prefix)
     app.include_router(threads.router, prefix=prefix)
+    app.include_router(agents.router, prefix=prefix)
     app.include_router(ingest.router, prefix=prefix)
     app.include_router(admin.router, prefix=prefix)
 
