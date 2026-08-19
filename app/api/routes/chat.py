@@ -193,7 +193,7 @@ async def chat(
     return ChatResponse(
         thread_id=thread_id,
         answer=_extract_answer(result),
-        agent=request.agent or request.agent_type_id or "base",
+        agent=result.get("agent") or request.agent or request.agent_type_id or "base",
         tools_used=list(result.get("tools_used", [])),
         model=result.get("provider") or model,
         execution_id=execution_id,
