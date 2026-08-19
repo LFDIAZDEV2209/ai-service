@@ -34,10 +34,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS abierto para desarrollo (ajustar orígenes en producción)
+    # CORS: allowlist explícita desde configuración (settings.cors_origins).
+    # No hay clientes de navegador del AI Service: el backend .NET lo consume
+    # server-to-server. En producción el servicio debe escuchar solo en red
+    # interna (docs/observability.md) y CORS_ORIGINS define la allowlist.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.cors_origins,
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],

@@ -10,13 +10,25 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
-
-DEFAULT_URL = "postgresql://app_user:CoppAddresdDev!2026@localhost:5432/coppaddresd"
+from app.core.errors import ConfigError
 
 
 def sqlalchemy_url() -> str:
-    """Normaliza `DATABASE_URL` al dialecto de SQLAlchemy con psycopg3."""
-    raw = get_settings().database_url or DEFAULT_URL
+    """Normaliza `DATABASE_URL` al dialecto de SQLAlchemy con psycopg3.
+
+    La conexión se obtiene SIEMPRE de configuración externa (`DATABASE_URL`).
+    Si falta, falla con un error claro: no existe URL por defecto (no hay
+    credenciales hardcodeadas).
+    """
+    settings = get_settings()
+    raw = settings.database_url
+    if not raw:
+        raise ConfigError(
+            "Configuración incompleta: falta DATABASE_URL. "
+            f"Entorno: {settings.environment}. "
+            "Componente: app.db.engine (conexión SQLAlchemy async, schema ai). "
+            "Configúrala en el archivo .env (variable DATABASE_URL)."
+        )
     if raw.startswith("postgres://"):
         raw = raw.replace("postgres://", "postgresql://", 1)
     if raw.startswith("postgresql://") and "+psycopg" not in raw:

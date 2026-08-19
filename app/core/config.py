@@ -2,7 +2,10 @@
 
 from functools import lru_cache
 
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.core.errors import ConfigError
 
 
 class Settings(BaseSettings):
@@ -44,6 +47,16 @@ class Settings(BaseSettings):
     # Clave compartida con el backend para endpoints internos (X-Internal-Key)
     internal_api_key: str = ""
 
+    # CORS — allowlist explícita de orígenes (separados por coma en CORS_ORIGINS).
+    # No hay clientes de navegador del AI Service hoy: el backend .NET lo consume
+    # server-to-server. Se mantienen orígenes de desarrollo documentados.
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
+
     # Memoria
     database_url: str | None = None  # Postgres → checkpointer real; None → MemorySaver
     memory_store_path: str = "./data/memory.json"
@@ -52,9 +65,46 @@ class Settings(BaseSettings):
     docs_path: str = "./docs"
     rag_top_k: int = 5
 
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _split_cors_origins(cls, v):
+        """Acepta `CORS_ORIGINS` como lista JSON o string separado por comas."""
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
     @property
     def is_production(self) -> bool:
         return self.environment.lower() in {"production", "prod"}
+
+    @model_validator(mode="after")
+    def _validate_production(self) -> "Settings":
+        """En producción las variables críticas son obligatorias; sin ellas la
+        aplicación no arranca (error claro, sin exponer valores)."""
+        if not self.is_production:
+            return self
+
+        missing: list[str] = []
+        if not self.database_url:
+            missing.append(
+                "DATABASE_URL (componente: app.db.engine — conexión SQLAlchemy async, "
+                "schema ai; y app.memory.checkpointer)"
+            )
+        if not self.internal_api_key:
+            missing.append(
+                "INTERNAL_API_KEY (componente: app.api.routes.internal — endpoints X-Internal-Key)"
+            )
+        provider = self.llm_provider.strip().lower()
+        if provider == "anthropic" and not self.anthropic_api_key:
+            missing.append("ANTHROPIC_API_KEY (componente: app.llm.factory — modelo de chat)")
+        if provider == "openai" and not self.openai_api_key:
+            missing.append("OPENAI_API_KEY (componente: app.llm.factory — modelo de chat)")
+
+        if missing:
+            raise ConfigError(
+                "Configuración incompleta para entorno production. Faltan: " + "; ".join(missing)
+            )
+        return self
 
 
 @lru_cache(maxsize=1)
