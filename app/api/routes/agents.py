@@ -17,18 +17,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.registry import AGENTS
 from app.api.deps import get_db_session
+from app.api.security import require_internal_key
 from app.db.models import AgentRuntimeConfig as AgentRuntimeConfigRow
 
-router = APIRouter(prefix="/agents", tags=["agents"])
+# Canal interno: los agentes son configuración administrativa del backend
+# (X-Internal-Key). No se exponen system prompts ni instrucciones internas.
+router = APIRouter(
+    prefix="/agents",
+    tags=["agents"],
+    dependencies=[Depends(require_internal_key)],
+)
 
 
 class AgentConfigOut(BaseModel):
     key: str
     name: str
     description: str
-    # Si existe config en BD, es la fuente de verdad; si no, es el prompt de
-    # código (fallback) con la marca `from_code`.
-    system_prompt: str
     provider: str | None = None
     model: str | None = None
     tools: list[str] = []
@@ -62,7 +66,6 @@ async def list_agents(
                     key=key,
                     name=profile.name,
                     description=profile.description,
-                    system_prompt=cfg.get("system_prompt", profile.system_prompt),
                     provider=cfg.get("provider"),
                     model=cfg.get("model"),
                     tools=list(cfg.get("tools", [])),
@@ -75,7 +78,6 @@ async def list_agents(
                     key=key,
                     name=profile.name,
                     description=profile.description,
-                    system_prompt=profile.system_prompt,
                     provider=profile.provider,
                     model=profile.model,
                     tools=list(profile.tools),
@@ -104,7 +106,6 @@ async def get_agent(
             key=key,
             name=profile.name,
             description=profile.description,
-            system_prompt=cfg.get("system_prompt", profile.system_prompt),
             provider=cfg.get("provider"),
             model=cfg.get("model"),
             tools=list(cfg.get("tools", [])),
@@ -115,7 +116,6 @@ async def get_agent(
         key=key,
         name=profile.name,
         description=profile.description,
-        system_prompt=profile.system_prompt,
         provider=profile.provider,
         model=profile.model,
         tools=list(profile.tools),

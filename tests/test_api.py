@@ -7,10 +7,15 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.api.deps import get_db_session, get_graph
 from app.api.main import create_app
+from app.core.config import get_settings
 from app.graph.graph import build_graph
 from tests.fakes import FakeToolAwareModel
 
 FAKE_ANSWER = "Respuesta de prueba"
+
+# Los endpoints funcionales exigen X-Internal-Key (canal backend → AI).
+INTERNAL_KEY = get_settings().internal_api_key
+HEADERS = {"X-Internal-Key": INTERNAL_KEY}
 
 
 class FakeDbSession:
@@ -62,8 +67,13 @@ def test_health(client):
     assert "calculate" in body["tools"]
 
 
-def test_chat_returns_answer(client):
+def test_chat_requires_internal_key(client):
     res = client.post("/api/v1/chat", json={"message": "hola"})
+    assert res.status_code == 401
+
+
+def test_chat_returns_answer(client):
+    res = client.post("/api/v1/chat", json={"message": "hola"}, headers=HEADERS)
     assert res.status_code == 200
     body = res.json()
     assert body["thread_id"]
@@ -72,7 +82,9 @@ def test_chat_returns_answer(client):
 
 
 def test_chat_stream_sse(client):
-    with client.stream("POST", "/api/v1/chat/stream", json={"message": "hola"}) as res:
+    with client.stream(
+        "POST", "/api/v1/chat/stream", json={"message": "hola"}, headers=HEADERS
+    ) as res:
         assert res.status_code == 200
         text = "".join(res.iter_text())
         assert "event:" in text

@@ -41,7 +41,10 @@ class Settings(BaseSettings):
 
     # Seguridad
     max_input_length: int = 8000
-    rate_limit_max_requests: int = 10
+    # Límite por cliente identificado (user_id real del backend/JWT); se cae
+    # a IP solo cuando no hay identidad. Suficiente para uso normal (un chat
+    # con streaming no cuenta por token, una request por turno).
+    rate_limit_max_requests: int = 60
     rate_limit_window_seconds: int = 60
 
     # Clave compartida con el backend para endpoints internos (X-Internal-Key)

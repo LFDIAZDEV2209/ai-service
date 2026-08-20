@@ -22,6 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db_session
+from app.api.security import require_internal_key
 from app.db.models import (
     AgentEvaluation,
     AgentExecution,
@@ -31,7 +32,14 @@ from app.db.models import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/admin/executions", tags=["admin"])
+# Canal interno: expone inputs/outputs completos, user_id y feedback de todas
+# las ejecuciones. Solo el backend (con X-Internal-Key) lo invoca tras su
+# propia autorización administrativa (permiso `Agents.View`).
+router = APIRouter(
+    prefix="/admin/executions",
+    tags=["admin"],
+    dependencies=[Depends(require_internal_key)],
+)
 
 # Ventana máxima de listado sin filtros (protege contra queries de rango completo).
 _DEFAULT_WINDOW_DAYS = 7

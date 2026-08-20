@@ -16,6 +16,7 @@ from app.agents.runtime_registry import AgentRuntimeError
 from app.agents.runtime_registry import registry as runtime_registry
 from app.api.deps import get_db_session, get_graph
 from app.api.schemas import ChatRequest, ChatResponse, FeedbackRequest, FeedbackResponse
+from app.api.security import require_internal_key
 from app.core.config import get_settings
 from app.core.errors import CoppAiError
 from app.core.logging import get_logger
@@ -25,7 +26,9 @@ from app.safety.guardrails import RateLimiter
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/chat", tags=["chat"])
+# Canal interno: solo el backend .NET (con X-Internal-Key) puede invocar el
+# chat. El frontend NUNCA llama a este servicio directo.
+router = APIRouter(prefix="/chat", tags=["chat"], dependencies=[Depends(require_internal_key)])
 
 _rate_limiters: dict[str, RateLimiter] = {}
 _rate_limiters_lock = threading.Lock()
@@ -54,16 +57,34 @@ def _rate_limiter_for(client_key: str) -> RateLimiter:
         return limiter
 
 
-def _client_key(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+def _client_key(request: Request, user_id: str | None) -> str:
+    """Clave de rate limit: el `user_id` real (inyectado por el backend desde
+    el JWT) cuando existe; si no, la IP como fallback (p. ej. health/uso sin
+    identidad). Varios usuarios tras una misma IP no se penalizan entre sí."""
+    if user_id:
+        return f"user:{user_id}"
+    return f"ip:{request.client.host}" if request.client else "ip:unknown"
 
 
-def _check_rate_limit(request: Request) -> None:
-    if not _rate_limiter_for(_client_key(request)).check():
+def _check_rate_limit(request: Request, user_id: str | None) -> None:
+    if not _rate_limiter_for(_client_key(request, user_id)).check():
         raise HTTPException(
             status_code=429,
             detail="Demasiadas solicitudes. Espera un momento antes de continuar.",
         )
+
+
+def _storage_thread_id(user_id: str | None, thread_id: str) -> str:
+    """Clave interna del thread en el checkpointer.
+
+    Se antepone el `user_id` real (proviene del backend, que lo deriva del
+    JWT): aunque dos usuarios enviaran el mismo `thread_id` desde el cliente,
+    jamás comparten historial ni estado — aislamiento de memoria/threads
+    garantizado a nivel de almacenamiento, no solo de UI.
+    """
+    if user_id:
+        return f"{user_id}::{thread_id}"
+    return thread_id
 
 
 def _build_config(
@@ -72,7 +93,11 @@ def _build_config(
     recursion_limit: int | None = None,
 ) -> dict:
     settings = get_settings()
-    configurable = {"thread_id": thread_id}
+    storage_thread_id = _storage_thread_id(
+        request.user_id if request is not None else None,
+        thread_id,
+    )
+    configurable = {"thread_id": storage_thread_id}
 
     # Aislamiento multi-agente: el checkpointer y las tools separan el estado
     # por usuario/paciente/instancia además del thread.
@@ -148,7 +173,7 @@ async def chat(
     base_graph=Depends(get_graph),
 ) -> ChatResponse:
     """Ejecuta el agente de principio a fin y devuelve la respuesta completa."""
-    _check_rate_limit(http_request)
+    _check_rate_limit(http_request, request.user_id)
     thread_id = request.thread_id or str(uuid.uuid4())
 
     graph, recursion_limit, version_id, provider, model = await _resolve_graph(request, session)
@@ -256,7 +281,7 @@ async def chat_stream(
     base_graph=Depends(get_graph),
 ) -> StreamingResponse:
     """Streaming del agente vía Server-Sent Events (tokens + nodos en vivo)."""
-    _check_rate_limit(http_request)
+    _check_rate_limit(http_request, request.user_id)
     thread_id = request.thread_id or str(uuid.uuid4())
 
     graph, recursion_limit, version_id, provider, model = await _resolve_graph(request, session)

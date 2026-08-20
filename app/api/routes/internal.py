@@ -4,14 +4,14 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import Base64Bytes, BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.runtime_registry import registry as runtime_registry
 from app.api.deps import get_db_session
-from app.core.config import get_settings
+from app.api.security import require_internal_key
 from app.db.models import AgentRuntimeConfig
 from app.rag.extract import DocumentExtractionError
 from app.rag.ingest import DocumentIngestResult, ingest_document_bytes
@@ -19,7 +19,11 @@ from app.rag.pgvector_store import PgVectorStore
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/internal", tags=["internal"])
+router = APIRouter(
+    prefix="/internal",
+    tags=["internal"],
+    dependencies=[Depends(require_internal_key)],
+)
 
 
 class AgentConfigSyncRequest(BaseModel):
@@ -61,19 +65,9 @@ class DocumentIngestResponse(BaseModel):
     error: str | None = None
 
 
-def _require_internal_key(x_internal_key: str | None) -> None:
-    """Valida el header X-Internal-Key contra la configuración compartida."""
-    expected = get_settings().internal_api_key
-    if not expected:
-        raise HTTPException(status_code=503, detail="internal_api_key no configurada")
-    if x_internal_key != expected:
-        raise HTTPException(status_code=401, detail="Clave interna inválida")
-
-
 @router.post("/agents/sync-config", response_model=AgentConfigSyncResponse)
 async def sync_agent_config(
     payload: AgentConfigSyncRequest,
-    x_internal_key: str | None = Header(default=None),
     session: AsyncSession = Depends(get_db_session),
 ) -> AgentConfigSyncResponse:
     """Upsert de la configuración de runtime de un tipo de agente.
@@ -82,8 +76,6 @@ async def sync_agent_config(
     `ai.agent_runtime_configs` la versión activa para que el runtime compile
     los grafos sin round-trips al backend en cada chat.
     """
-    _require_internal_key(x_internal_key)
-
     now = datetime.now(UTC)
     existing = (
         await session.execute(
@@ -131,7 +123,6 @@ async def sync_agent_config(
 @router.post("/agents/ingest", response_model=DocumentIngestResponse)
 async def ingest_document(
     payload: DocumentIngestRequest,
-    x_internal_key: str | None = Header(default=None),
     session: AsyncSession = Depends(get_db_session),
 ) -> DocumentIngestResponse:
     """Indexa un documento en pgvector (idempotente por documento).
@@ -140,8 +131,6 @@ async def ingest_document(
     extrae el texto (md/txt/PDF), genera chunks + embeddings y reemplaza los
     chunks anteriores del documento en `ai.knowledge_chunks`.
     """
-    _require_internal_key(x_internal_key)
-
     try:
         result: DocumentIngestResult = await ingest_document_bytes(
             session=session,
@@ -172,12 +161,9 @@ async def ingest_document(
 @router.delete("/agents/ingest/{document_id}", response_model=DocumentIngestResponse)
 async def delete_document_chunks(
     document_id: str,
-    x_internal_key: str | None = Header(default=None),
     session: AsyncSession = Depends(get_db_session),
 ) -> DocumentIngestResponse:
     """Elimina los chunks de un documento (borrado del catálogo en el backend)."""
-    _require_internal_key(x_internal_key)
-
     deleted = await PgVectorStore(session).delete_document(document_id)
     await session.commit()
 
