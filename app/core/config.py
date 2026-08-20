@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     llm_provider: str = "anthropic"
     llm_temperature: float = 0.2
     llm_max_tokens: int = 4096
+    # Timeout de la invocación completa del grafo (LLM + tools + RAG) en el
+    # chat síncrono. El backend corta a los 120s; este límite es menor para
+    # que el AI Service responda antes de que el backend asuma timeout.
+    llm_invoke_timeout: float = 90
 
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-4-6"

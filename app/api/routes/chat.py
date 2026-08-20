@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import threading
 import time
@@ -176,6 +177,18 @@ async def chat(
     _check_rate_limit(http_request, request.user_id)
     thread_id = request.thread_id or str(uuid.uuid4())
 
+    # Correlation ID propagado por el backend (X-Correlation-ID) para trazar
+    # la cadena Frontend → Backend → AI en los logs.
+    correlation_id = http_request.headers.get("x-correlation-id")
+    if correlation_id:
+        logger.info(
+            "chat: correlation_id=%s user=%s thread=%s agent=%s",
+            correlation_id,
+            request.user_id,
+            thread_id,
+            request.agent_type_id or request.agent or "base",
+        )
+
     graph, recursion_limit, version_id, provider, model = await _resolve_graph(request, session)
     if graph is None:
         graph = base_graph
@@ -193,9 +206,15 @@ async def chat(
     )
     started = time.perf_counter()
     try:
-        result = await graph.ainvoke(
-            {"input": request.message, "agent": request.agent or request.agent_type_id or "base"},
-            config=_build_config(thread_id, request, recursion_limit),
+        result = await asyncio.wait_for(
+            graph.ainvoke(
+                {
+                    "input": request.message,
+                    "agent": request.agent or request.agent_type_id or "base",
+                },
+                config=_build_config(thread_id, request, recursion_limit),
+            ),
+            timeout=get_settings().llm_invoke_timeout,
         )
         await tracker.complete(
             execution_id,
@@ -212,6 +231,31 @@ async def chat(
         )
         await session.commit()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except TimeoutError:
+        logger.error("Timeout del agente (thread=%s)", thread_id)
+        await tracker.fail(
+            execution_id,
+            error="Timeout del agente",
+            latency_ms=int((time.perf_counter() - started) * 1000),
+        )
+        await session.commit()
+        raise HTTPException(
+            status_code=500, detail="No fue posible procesar la solicitud."
+        ) from None
+    except Exception as exc:
+        # Cualquier error no tipado (p. ej. fallo de la API del LLM) debe
+        # actualizar el estado de la ejecución y devolver un mensaje seguro,
+        # no dejar la execution en RUNNING para siempre.
+        logger.exception("Error no controlado ejecutando el grafo")
+        await tracker.fail(
+            execution_id,
+            error=str(exc),
+            latency_ms=int((time.perf_counter() - started) * 1000),
+        )
+        await session.commit()
+        raise HTTPException(
+            status_code=500, detail="No fue posible procesar la solicitud."
+        ) from exc
 
     await session.commit()
 
@@ -283,6 +327,16 @@ async def chat_stream(
     """Streaming del agente vía Server-Sent Events (tokens + nodos en vivo)."""
     _check_rate_limit(http_request, request.user_id)
     thread_id = request.thread_id or str(uuid.uuid4())
+
+    correlation_id = http_request.headers.get("x-correlation-id")
+    if correlation_id:
+        logger.info(
+            "chat/stream: correlation_id=%s user=%s thread=%s agent=%s",
+            correlation_id,
+            request.user_id,
+            thread_id,
+            request.agent_type_id or request.agent or "base",
+        )
 
     graph, recursion_limit, version_id, provider, model = await _resolve_graph(request, session)
     if graph is None:
