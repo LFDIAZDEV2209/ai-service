@@ -9,3 +9,5 @@ pydantic>=2.7
 pydantic-settings>=2.6
 numpy>=2.0
 psycopg[binary]>=3.2
+sqlalchemy[asyncio]>=2.0
+pgvector>=0.3
