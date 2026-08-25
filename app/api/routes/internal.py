@@ -16,6 +16,11 @@ from app.db.models import AgentRuntimeConfig
 from app.rag.extract import DocumentExtractionError
 from app.rag.ingest import DocumentIngestResult, ingest_document_bytes
 from app.rag.pgvector_store import PgVectorStore
+from app.schemas.plan_generation import PlanGenerationRequest, PlanGenerationResponse
+from app.services.plan_generation import (
+    PlanGenerationService,
+    get_plan_generation_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -174,3 +179,24 @@ async def delete_document_chunks(
         chunks_created=0,
         replaced_chunks=deleted,
     )
+
+
+@router.post("/wellness/generate-plan", response_model=PlanGenerationResponse)
+async def generate_wellness_plan(
+    payload: PlanGenerationRequest,
+    service: PlanGenerationService = Depends(get_plan_generation_service),
+) -> PlanGenerationResponse:
+    """Genera un plan de alimentación o rutina con IA a partir del contexto clínico.
+
+    El backend .NET envía el contexto clínico del paciente + restricciones de
+    seguridad; el servicio llama al LLM (temperatura baja), valida el resultado
+    contra los esquemas Pydantic y lo devuelve listo como payload de creación.
+    El manejo de errores (422/503/504) ocurre dentro del servicio.
+    """
+    try:
+        return await service(payload)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Error generando plan de tipo %s", payload.type)
+        raise HTTPException(status_code=500, detail=f"Error generando plan: {exc}") from exc

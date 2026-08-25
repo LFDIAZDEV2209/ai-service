@@ -57,6 +57,7 @@ def get_chat_model(
             model=model or settings.openai_model,
             api_key=settings.openai_api_key,
             temperature=temperature,
+            max_tokens=max_tokens,
             streaming=True,
         )
 
