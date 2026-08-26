@@ -139,4 +139,4 @@ jobs:
               --tasks "$T" --region "${{ env.AWS_REGION }}" \
               --query "tasks[0].{Status:lastStatus,Stop:stoppedReason,Containers:containers[*].{Name:name,Exit:exitCode,Reason:reason}}" \
               --output json
-          done
+          done# re-register
