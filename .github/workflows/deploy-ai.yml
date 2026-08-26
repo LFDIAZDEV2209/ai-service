@@ -45,6 +45,7 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/test
           ENVIRONMENT: test
+          INTERNAL_API_KEY: ci-test-key
 
   deploy:
     needs: test
