@@ -1,0 +1,26 @@
+name: OIDC Test
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  oidc-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::933629770820:role/cooppadresd-gha-ai
+          aws-region: us-east-2
+
+      - name: Verify identity
+        run: |
+          aws sts get-caller-identity
