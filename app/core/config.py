@@ -32,6 +32,17 @@ class Settings(BaseSettings):
     # que el AI Service responda antes de que el backend asuma timeout.
     llm_invoke_timeout: float = 90
 
+    # Generación de planes (wellness) — endpoint interno /internal/wellness/generate-plan.
+    # Temperatura baja para salida determinista y estructurada (JSON).
+    plan_generation_temperature: float = 0.3
+    # Timeout de la invocación LLM para generar un plan (una sola llamada).
+    plan_generation_timeout: float = 60
+    # Presupuesto de tokens de salida para generar un plan. Un plan de 7 días
+    # con 4 comidas/día y macros es un JSON largo: 4096 (default global) suele
+    # quedarse corto y truncar la respuesta (stop_reason=max_tokens), lo que
+    # rompe el structured output. Valor alto para no truncar.
+    plan_generation_max_tokens: int = 8000
+
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-4-6"
 

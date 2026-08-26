@@ -33,6 +33,7 @@ class AgentConfigOut(BaseModel):
     key: str
     name: str
     description: str
+    system_prompt: str = ""
     provider: str | None = None
     model: str | None = None
     tools: list[str] = []
@@ -66,6 +67,7 @@ async def list_agents(
                     key=key,
                     name=profile.name,
                     description=profile.description,
+                    system_prompt=cfg.get("system_prompt", profile.system_prompt),
                     provider=cfg.get("provider"),
                     model=cfg.get("model"),
                     tools=list(cfg.get("tools", [])),
@@ -106,6 +108,7 @@ async def get_agent(
             key=key,
             name=profile.name,
             description=profile.description,
+            system_prompt=cfg.get("system_prompt", profile.system_prompt),
             provider=cfg.get("provider"),
             model=cfg.get("model"),
             tools=list(cfg.get("tools", [])),
