@@ -40,6 +40,7 @@ ignore = ["B008"]  # B008: Depends() en defaults es patrón estándar de FastAPI
 
 [tool.ruff.lint.per-file-ignores]
 "alembic/versions/*.py" = ["E501", "W291"]  # migraciones autogeneradas por Alembic
+"scripts/*.py" = ["RUF100", "E501", "I001", "F401", "F541"]  # scripts de seed/dev, no código del servicio
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
