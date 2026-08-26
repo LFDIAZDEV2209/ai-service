@@ -96,38 +96,45 @@ jobs:
             --task-definition "${{ steps.taskdef.outputs.arn }}" \
             --region "${{ env.AWS_REGION }}"
 
-      - name: Esperar deployment estable
+      - name: Esperar rollout COMPLETED (polling 15s)
         timeout-minutes: 20
-        run: |
-          aws ecs wait services-stable \
-            --cluster "${{ env.ECS_CLUSTER }}" \
-            --services "${{ env.ECS_SERVICE }}" \
-            --region "${{ env.AWS_REGION }}"
-
-      - name: Validar rollout COMPLETED
         shell: bash
         run: |
-          STATE=$(aws ecs describe-services \
-            --cluster "${{ env.ECS_CLUSTER }}" \
-            --services "${{ env.ECS_SERVICE }}" \
-            --region "${{ env.AWS_REGION }}" \
-            --query "services[0].deployments[0].rolloutState" --output text)
-          RUNNING=$(aws ecs describe-services \
-            --cluster "${{ env.ECS_CLUSTER }}" \
-            --services "${{ env.ECS_SERVICE }}" \
-            --region "${{ env.AWS_REGION }}" \
-            --query "services[0].runningCount" --output text)
-          DESIRED=$(aws ecs describe-services \
-            --cluster "${{ env.ECS_CLUSTER }}" \
-            --services "${{ env.ECS_SERVICE }}" \
-            --region "${{ env.AWS_REGION }}" \
-            --query "services[0].desiredCount" --output text)
-          echo "Service: ${{ env.ECS_SERVICE }}"
-          echo "Rollout: $STATE | Running: $RUNNING | Desired: $DESIRED"
-          if [ "$STATE" != "COMPLETED" ] || [ "$RUNNING" != "$DESIRED" ]; then
-            echo "::error::Deployment no estable: rollout=$STATE running=$RUNNING desired=$DESIRED"
-            exit 1
-          fi
+          SERVICE="${{ env.ECS_SERVICE }}"
+          TD_ARN="${{ steps.taskdef.outputs.arn }}"
+          DEADLINE=$((SECONDS + 1200))
+
+          while true; do
+            DEP=$(aws ecs describe-services \
+              --cluster "${{ env.ECS_CLUSTER }}" \
+              --services "$SERVICE" \
+              --region "${{ env.AWS_REGION }}" \
+              --query "services[0].deployments[?taskDefinition=='$TD_ARN'] | [0]" \
+              --output json)
+
+            STATE=$(echo "$DEP" | jq -r '.rolloutState // "MISSING"')
+            RUNNING=$(echo "$DEP" | jq -r '.runningCount // "?"')
+            DESIRED=$(echo "$DEP" | jq -r '.desiredCount // "?"')
+
+            echo "[$(date -u +%H:%M:%S)] rollout=$STATE running=$RUNNING desired=$DESIRED"
+
+            if [ "$STATE" = "COMPLETED" ] && [ "$RUNNING" = "$DESIRED" ]; then
+              echo "Deployment estable: rollout=$STATE running=$RUNNING desired=$DESIRED"
+              exit 0
+            fi
+
+            if [ "$STATE" = "FAILED" ]; then
+              echo "::error::Rollout FAILED: el deployment de $SERVICE no pudo completarse"
+              exit 1
+            fi
+
+            if [ "$SECONDS" -ge "$DEADLINE" ]; then
+              echo "::error::Timeout 20 min: rollout=$STATE running=$RUNNING desired=$DESIRED"
+              exit 1
+            fi
+
+            sleep 15
+          done
 
       - name: Diagnóstico en fallo
         if: failure()
@@ -143,4 +150,5 @@ jobs:
               --tasks "$T" --region "${{ env.AWS_REGION }}" \
               --query "tasks[0].{Status:lastStatus,Stop:stoppedReason,Containers:containers[*].{Name:name,Exit:exitCode,Reason:reason}}" \
               --output json
-          done# re-register
+          done
+          # re-register
