@@ -50,7 +50,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Modo online: ejecuta las migraciones contra la base."""
+    """Modo online: ejecuta las migraciones contra la base con advisory lock distribuido."""
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -59,14 +59,27 @@ def run_migrations_online() -> None:
     with connectable.connect() as connection:
         _ensure_schema(connection)
         connection.commit()
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            version_table_schema=SCHEMA,
-            include_object=include_object,
-        )
-        with context.begin_transaction():
-            context.run_migrations()
+        # Advisory lock distribuido en Postgres: evita condiciones de carrera
+        # si múltiples instancias o workers arrancan simultáneamente.
+        # ID 4704389938885489217 (hash 'AI_MIGRA')
+        advisory_lock_id = 4704389938885489217
+        is_postgres = connection.dialect.name == "postgresql"
+        if is_postgres:
+            connection.execute(text(f"SELECT pg_advisory_lock({advisory_lock_id})"))
+            connection.commit()
+        try:
+            context.configure(
+                connection=connection,
+                target_metadata=target_metadata,
+                version_table_schema=SCHEMA,
+                include_object=include_object,
+            )
+            with context.begin_transaction():
+                context.run_migrations()
+        finally:
+            if is_postgres:
+                connection.execute(text(f"SELECT pg_advisory_unlock({advisory_lock_id})"))
+                connection.commit()
 
 
 if context.is_offline_mode():

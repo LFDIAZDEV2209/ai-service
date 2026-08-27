@@ -75,8 +75,9 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8000",
     ]
 
-    # Memoria
+    # Base de datos y migraciones
     database_url: str | None = None  # Postgres → checkpointer real; None → MemorySaver
+    auto_migrate: bool = True  # Aplica migraciones Alembic automáticamente en startup
     memory_store_path: str = "./data/memory.json"
 
     # RAG

@@ -46,3 +46,35 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 def get_sync_engine():
     """Motor síncrono para herramientas de mantenimiento (Alembic)."""
     return create_engine(sqlalchemy_url(), pool_pre_ping=True)
+
+
+def run_db_migrations() -> None:
+    """Ejecuta las migraciones de Alembic si `auto_migrate` está habilitado.
+
+    Alembic es idempotente (revisa `ai.alembic_version`).
+    Además, `alembic/env.py` usa un Advisory Lock en PostgreSQL (`pg_advisory_lock`)
+    para que si varios workers o instancias arrancan a la vez, no colisionen ni dupliquen ejecuciones.
+    """
+    settings = get_settings()
+    if not settings.auto_migrate or not settings.database_url:
+        return
+
+    import logging
+    from pathlib import Path
+    from alembic import command
+    from alembic.config import Config
+
+    logger = logging.getLogger("app.db.migrations")
+    ini_path = Path(__file__).resolve().parent.parent.parent / "alembic.ini"
+    if not ini_path.exists():
+        logger.warning("alembic.ini no encontrado en %s, se omiten migraciones automáticas", ini_path)
+        return
+
+    logger.info("Verificando migraciones automáticas de base de datos...")
+    alembic_cfg = Config(str(ini_path))
+    try:
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Migraciones de base de datos verificadas/aplicadas exitosamente.")
+    except Exception:
+        logger.exception("Error al aplicar migraciones automáticas de Alembic")
+        raise

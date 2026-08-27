@@ -21,8 +21,12 @@ htmlcov/
 .ruff_cache/
 *.log
 
-# IDE / OS
+# IDE / OS / Tooling
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
+.agents/
+.codegraph/
+.engram/
+.atl/
