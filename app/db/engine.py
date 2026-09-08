@@ -53,7 +53,7 @@ def run_db_migrations() -> None:
 
     Alembic es idempotente (revisa `ai.alembic_version`).
     Además, `alembic/env.py` usa un Advisory Lock en PostgreSQL (`pg_advisory_lock`)
-    para que si varios workers o instancias arrancan a la vez, no colisionen ni dupliquen ejecuciones.
+    para que varias instancias al arrancar no colisionen ni dupliquen ejecuciones.
     """
     settings = get_settings()
     if not settings.auto_migrate or not settings.database_url:
@@ -61,13 +61,17 @@ def run_db_migrations() -> None:
 
     import logging
     from pathlib import Path
-    from alembic import command
+
     from alembic.config import Config
+
+    from alembic import command
 
     logger = logging.getLogger("app.db.migrations")
     ini_path = Path(__file__).resolve().parent.parent.parent / "alembic.ini"
     if not ini_path.exists():
-        logger.warning("alembic.ini no encontrado en %s, se omiten migraciones automáticas", ini_path)
+        logger.warning(
+            "alembic.ini no encontrado en %s, se omiten migraciones automáticas", ini_path
+        )
         return
 
     logger.info("Verificando migraciones automáticas de base de datos...")
