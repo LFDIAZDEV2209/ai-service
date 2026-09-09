@@ -16,6 +16,7 @@ from langchain_core.messages import AIMessage, AIMessageChunk
 from app.agents.runtime_registry import AgentRuntimeError
 from app.agents.runtime_registry import registry as runtime_registry
 from app.api.deps import get_db_session, get_graph
+from app.api.message_text import extract_message_text
 from app.api.schemas import (
     ChatRequest,
     ChatResponse,
@@ -157,19 +158,7 @@ def _extract_answer(state: dict) -> str:
     if not messages:
         return ""
     last = messages[-1]
-    content = getattr(last, "content", "")
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        # Claude devuelve content como lista de bloques ({type: text, text: ...});
-        # se extrae el texto igual que en el streaming para no serializar la
-        # lista cruda (str(lista) mostraba "[{'text': ...}]" en el chat).
-        return "".join(
-            block.get("text", "")
-            for block in content
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
-    return str(content)
+    return extract_message_text(getattr(last, "content", ""))
 
 
 def _normalize_suggestions(raw: Any) -> list[ChatSuggestion]:

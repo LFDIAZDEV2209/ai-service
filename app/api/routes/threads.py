@@ -9,6 +9,7 @@ de un thread de otro usuario aunque adivine el `thread_id` (Pruebas A/B/C).
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.deps import get_graph
+from app.api.message_text import extract_message_text
 from app.api.schemas import ThreadStateResponse
 from app.api.security import require_internal_key
 
@@ -39,5 +40,7 @@ async def thread_state(
     return ThreadStateResponse(
         thread_id=thread_id,
         message_count=len(messages),
-        last_message=last_content if isinstance(last_content, str) else str(last_content),
+        # content puede ser lista de bloques (Claude): extraer texto plano,
+        # nunca str(lista) que mostraba "[{'text': ...}]" en el chat.
+        last_message=extract_message_text(last_content),
     )
