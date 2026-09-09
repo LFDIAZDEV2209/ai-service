@@ -44,9 +44,7 @@ class FakeDbSession:
 @pytest.fixture
 def client():
     app = create_app()
-    fake = FakeToolAwareModel(
-        responses=[AIMessage(content=FAKE_ANSWER) for _ in range(5)]
-    )
+    fake = FakeToolAwareModel(responses=[AIMessage(content=FAKE_ANSWER) for _ in range(5)])
 
     def override():
         return build_graph(model=fake, checkpointer=MemorySaver())

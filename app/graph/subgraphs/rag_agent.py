@@ -51,10 +51,7 @@ def _make_answer_node(model: BaseChatModel):
         messages = [
             SystemMessage(content=RAG_SYSTEM_PROMPT),
             HumanMessage(
-                content=(
-                    f"Contexto:\n{state.get('context', '')}\n\n"
-                    f"Pregunta: {state['question']}"
-                )
+                content=(f"Contexto:\n{state.get('context', '')}\n\nPregunta: {state['question']}")
             ),
         ]
         response = model.invoke(messages)

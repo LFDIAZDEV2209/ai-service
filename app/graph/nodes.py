@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 
@@ -181,9 +182,7 @@ def make_memory_save_node(
                 history.append(text)
 
         with suppress(Exception):
-            last_summary = await service.get_summary(
-                user_id=user_id, agent_type_id=agent_type_id
-            )
+            last_summary = await service.get_summary(user_id=user_id, agent_type_id=agent_type_id)
             await service.maybe_roll_summary(
                 user_id=user_id,
                 agent_type_id=agent_type_id,
@@ -197,6 +196,7 @@ def make_memory_save_node(
         return {}
 
     return memory_save_node
+
 
 def make_experience_load_node(
     service_factory: Callable[[], AdaptiveMemoryService] | None = None,
@@ -248,6 +248,10 @@ def make_tools_node(tools: list[BaseTool] | None = None) -> Callable[[AgentState
     (p. ej. `retrieve_knowledge`) fallan con "StructuredTool does not support
     sync invocation". Con `ainvoke` se usa `_execute_tool_async` y las tools
     coroutine funcionan.
+
+    Además de ejecutar las tools, captura las sugerencias estructuradas
+    emitidas por `suggest_appointment` (ver `_extract_suggestions`) y las
+    acumula en `state["suggestions"]`.
     """
     selected = tools or ALL_TOOLS
     node = ToolNode(selected)
@@ -259,9 +263,35 @@ def make_tools_node(tools: list[BaseTool] | None = None) -> Callable[[AgentState
             tool_names = [tc.get("name", "?") for tc in last.tool_calls]
 
         result = await node.ainvoke(state)
-        return {**result, "tools_used": tool_names}
+        return {
+            **result,
+            "tools_used": tool_names,
+            "suggestions": _extract_suggestions(result.get("messages", [])),
+        }
 
     return tools_node
+
+
+def _extract_suggestions(messages: list) -> list[dict]:
+    """Extrae las sugerencias estructuradas de los ToolMessages del turno.
+
+    `suggest_appointment` devuelve un JSON serializado; aquí se parsea cada
+    ToolMessage de esa tool y se devuelve la lista de dicts para acumular en
+    el estado. Los mensajes malformados se descartan en silencio (nunca deben
+    tumbar el turno).
+    """
+    suggestions: list[dict] = []
+    for msg in messages:
+        if getattr(msg, "name", None) != "suggest_appointment":
+            continue
+        content = getattr(msg, "content", "")
+        if not isinstance(content, str) or not content:
+            continue
+        with suppress(Exception):
+            data = json.loads(content)
+            if isinstance(data, dict):
+                suggestions.append(data)
+    return suggestions
 
 
 async def tools_node(state: AgentState) -> dict:

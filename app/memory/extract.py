@@ -163,8 +163,6 @@ def extract_facts(message: str) -> ExtractionResult:
                 continue
             seen.add(key)
 
-            result.facts.append(
-                UserFact(content=content, category=category, importance=importance)
-            )
+            result.facts.append(UserFact(content=content, category=category, importance=importance))
 
     return result

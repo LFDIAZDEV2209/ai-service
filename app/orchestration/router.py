@@ -21,20 +21,67 @@ from app.graph.state import AgentState
 # "presion"). Usar raíces cortas: "ayun" cubre "ayunar"/"ayuno".
 _KEYWORDS: dict[str, tuple[str, ...]] = {
     "nutrition": (
-        "comer", "comida", "diet", "calor", "kcal", "aliment", "menu", "recet",
-        "porcion", "ayun", "glucos", "vitamin", "imc", "nutricion", "protein",
-        "carbohidr", "nutrient", "peso",
+        "comer",
+        "comida",
+        "diet",
+        "calor",
+        "kcal",
+        "aliment",
+        "menu",
+        "recet",
+        "porcion",
+        "ayun",
+        "glucos",
+        "vitamin",
+        "imc",
+        "nutricion",
+        "protein",
+        "carbohidr",
+        "nutrient",
+        "peso",
     ),
     "medical": (
-        "dolor", "dolie", "dole", "sintoma", "medicament", "dosis", "diagnost",
-        "presion", "fiebre", "condicion", "tratamiento", "salud", "enfermed",
-        "medico", "vomito", "mareo", "palpitac", "dificultad", "urgencia",
-        "pecho", "respir", "dolor de pecho",
+        "dolor",
+        "dolie",
+        "dole",
+        "sintoma",
+        "medicament",
+        "dosis",
+        "diagnost",
+        "presion",
+        "fiebre",
+        "condicion",
+        "tratamiento",
+        "salud",
+        "enfermed",
+        "medico",
+        "vomito",
+        "mareo",
+        "palpitac",
+        "dificultad",
+        "urgencia",
+        "pecho",
+        "respir",
+        "dolor de pecho",
     ),
     "psychology": (
-        "ansied", "ansios", "estres", "depresi", "trist", "mied", "insomni",
-        "animo", "terapia", "psicolog", "panico", "nervi", "angusti",
-        "emocional", "salud mental", "bienestar emocional", "mindfulness",
+        "ansied",
+        "ansios",
+        "estres",
+        "depresi",
+        "trist",
+        "mied",
+        "insomni",
+        "animo",
+        "terapia",
+        "psicolog",
+        "panico",
+        "nervi",
+        "angusti",
+        "emocional",
+        "salud mental",
+        "bienestar emocional",
+        "mindfulness",
     ),
 }
 
@@ -69,9 +116,7 @@ def _score_domain(text: str, keywords: tuple[str, ...]) -> int:
     con más evidencia ("comer"+"dieta" de nutrition).
     """
     tokens = _tokens(text)
-    return sum(
-        1 for kw in keywords if kw in text and any(tok.startswith(kw) for tok in tokens)
-    )
+    return sum(1 for kw in keywords if kw in text and any(tok.startswith(kw) for tok in tokens))
 
 
 class IntentRouter:

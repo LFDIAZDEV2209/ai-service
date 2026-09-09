@@ -186,28 +186,46 @@ async def test_experiencia_sin_trigger_o_response_levanta_error():
 
 
 def _seed_experiences(session: FakeSession) -> None:
-    session.set_rows([
-        FakeExperience(
-            id="e1", agent_type_id=AGENT_DOC, trigger_pattern="t1",
-            response_pattern="r1", outcome=OUTCOME_SUCCESS,
-            success_rating=0.9, recurrence_count=5,
-        ),
-        FakeExperience(
-            id="e2", agent_type_id=AGENT_DOC, trigger_pattern="t2",
-            response_pattern="r2", outcome=OUTCOME_ERROR,
-            success_rating=0.2, recurrence_count=3,
-        ),
-        FakeExperience(
-            id="e3", agent_type_id=AGENT_DOC, trigger_pattern="t3",
-            response_pattern="r3", outcome=OUTCOME_SUCCESS,
-            success_rating=0.8, recurrence_count=1,  # sin recurrencia mínima
-        ),
-        FakeExperience(
-            id="e4", agent_type_id=AGENT_PSY, trigger_pattern="t4",
-            response_pattern="r4", outcome=OUTCOME_SUCCESS,
-            success_rating=0.9, recurrence_count=9,
-        ),
-    ])
+    session.set_rows(
+        [
+            FakeExperience(
+                id="e1",
+                agent_type_id=AGENT_DOC,
+                trigger_pattern="t1",
+                response_pattern="r1",
+                outcome=OUTCOME_SUCCESS,
+                success_rating=0.9,
+                recurrence_count=5,
+            ),
+            FakeExperience(
+                id="e2",
+                agent_type_id=AGENT_DOC,
+                trigger_pattern="t2",
+                response_pattern="r2",
+                outcome=OUTCOME_ERROR,
+                success_rating=0.2,
+                recurrence_count=3,
+            ),
+            FakeExperience(
+                id="e3",
+                agent_type_id=AGENT_DOC,
+                trigger_pattern="t3",
+                response_pattern="r3",
+                outcome=OUTCOME_SUCCESS,
+                success_rating=0.8,
+                recurrence_count=1,  # sin recurrencia mínima
+            ),
+            FakeExperience(
+                id="e4",
+                agent_type_id=AGENT_PSY,
+                trigger_pattern="t4",
+                response_pattern="r4",
+                outcome=OUTCOME_SUCCESS,
+                success_rating=0.9,
+                recurrence_count=9,
+            ),
+        ]
+    )
 
 
 async def test_load_experiences_solo_exitosas_recurrentes_y_de_este_agente():

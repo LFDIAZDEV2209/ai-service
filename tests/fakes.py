@@ -39,9 +39,7 @@ class FakeToolAwareModel(FakeMessagesListChatModel):
             content = message.content
             if isinstance(content, list):
                 content = "".join(
-                    part.get("text", "")
-                    for part in content
-                    if isinstance(part, dict)
+                    part.get("text", "") for part in content if isinstance(part, dict)
                 )
             data = json.loads(content)
             plan_data = data.get("plan") if isinstance(data, dict) and "plan" in data else data
@@ -73,9 +71,7 @@ class FakeStructuredModel:
             content = raw.content
             if isinstance(content, list):
                 content = "".join(
-                    part.get("text", "")
-                    for part in content
-                    if isinstance(part, dict)
+                    part.get("text", "") for part in content if isinstance(part, dict)
                 )
             data = json.loads(content)
             plan_data = data.get("plan") if isinstance(data, dict) and "plan" in data else data

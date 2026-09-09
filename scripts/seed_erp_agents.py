@@ -99,9 +99,7 @@ async def _seed_and_sync() -> None:
 
             # Buscar si ya existe el agente por slug
             existing = await session.execute(
-                text(
-                    'SELECT id FROM agents.agent_types WHERE slug = :slug'
-                ),
+                text("SELECT id FROM agents.agent_types WHERE slug = :slug"),
                 {"slug": slug},
             )
             row = existing.first()
@@ -132,7 +130,7 @@ async def _seed_and_sync() -> None:
             # Crear versión (idempotente: buscar versión existente)
             ver_existing = await session.execute(
                 text(
-                    'SELECT id FROM agents.agent_type_versions WHERE agent_type_id = :aid AND version_number = 1'
+                    "SELECT id FROM agents.agent_type_versions WHERE agent_type_id = :aid AND version_number = 1"
                 ),
                 {"aid": agent_id},
             )
@@ -141,9 +139,7 @@ async def _seed_and_sync() -> None:
             if ver_row is not None:
                 version_id = ver_row[0]
                 await session.execute(
-                    text(
-                        "UPDATE agents.agent_type_versions SET config = :cfg WHERE id = :vid"
-                    ),
+                    text("UPDATE agents.agent_type_versions SET config = :cfg WHERE id = :vid"),
                     {"cfg": config_json, "vid": version_id},
                 )
                 print(f"  [update] versión 1 existente")
@@ -161,9 +157,7 @@ async def _seed_and_sync() -> None:
 
             # Asignar versión activa
             await session.execute(
-                text(
-                    "UPDATE agents.agent_types SET active_version_id = :vid WHERE id = :aid"
-                ),
+                text("UPDATE agents.agent_types SET active_version_id = :vid WHERE id = :aid"),
                 {"vid": version_id, "aid": agent_id},
             )
 

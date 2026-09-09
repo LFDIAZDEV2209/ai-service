@@ -81,10 +81,7 @@ def make_retrieve_tool(
         ]
         # Las fuentes se exponen en un bloque JSON aparte para observabilidad
         # (el playground las muestra); el contexto citado es lo que el LLM usa.
-        return (
-            f"{context}\n\n"
-            f"[FUENTES: {json.dumps(sources, ensure_ascii=False)}]"
-        )
+        return f"{context}\n\n[FUENTES: {json.dumps(sources, ensure_ascii=False)}]"
 
     tool_instance = cast(BaseTool, retrieve_knowledge)
     tool_instance.name = RETRIEVE_TOOL_NAME

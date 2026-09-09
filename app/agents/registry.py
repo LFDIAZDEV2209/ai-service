@@ -59,7 +59,5 @@ AGENTS: dict[str, AgentProfile] = {
 def get_agent_profile(key: str = "base") -> AgentProfile:
     profile = AGENTS.get(key)
     if profile is None:
-        raise KeyError(
-            f"Perfil de agente desconocido: {key!r}. Disponibles: {sorted(AGENTS)}"
-        )
+        raise KeyError(f"Perfil de agente desconocido: {key!r}. Disponibles: {sorted(AGENTS)}")
     return profile

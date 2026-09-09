@@ -60,9 +60,7 @@ async def get_checkpointer():
             await _pool.open()
             _checkpointer = AsyncPostgresSaver(_pool)
             await _checkpointer.setup()  # crea las tablas si no existen
-            logger.info(
-                "Checkpointer: AsyncPostgresSaver (persistencia real, schema ai)"
-            )
+            logger.info("Checkpointer: AsyncPostgresSaver (persistencia real, schema ai)")
             return _checkpointer
         except Exception as exc:
             logger.error("No se pudo iniciar AsyncPostgresSaver: %s", exc)

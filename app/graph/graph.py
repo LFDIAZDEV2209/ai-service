@@ -114,7 +114,6 @@ def build_graph(
         workflow.add_edge("memory_save", END)
 
     if checkpointer is None:
-
         raise ValueError(
             "build_graph requiere un checkpointer: resuélvelo con "
             "`await get_checkpointer()` (async) o pasa MemorySaver en tests."

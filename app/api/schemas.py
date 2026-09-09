@@ -29,6 +29,20 @@ class ChatRequest(BaseModel):
     )
 
 
+class ChatSuggestion(BaseModel):
+    """Sugerencia de acción estructurada para la capa de presentación.
+
+    v1: solo CTA de agenda de cita ("Agenda tu cita aquí") que la app móvil
+    del paciente puede renderizar como botón. El `reason` y la `urgency` los
+    decide el agente al llamar la tool `suggest_appointment`.
+    """
+
+    type: str = "appointment"
+    cta_text: str = "Agenda tu cita aquí"
+    reason: str | None = None
+    urgency: str = "normal"
+
+
 class ChatResponse(BaseModel):
     thread_id: str
     answer: str
@@ -38,6 +52,10 @@ class ChatResponse(BaseModel):
     execution_id: str | None = Field(
         default=None,
         description="ID de la ejecución registrada (observabilidad); úsalo para enviar feedback.",
+    )
+    suggestions: list[ChatSuggestion] = Field(
+        default_factory=list,
+        description="Sugerencias de acción estructuradas (p. ej. CTA de cita).",
     )
 
 

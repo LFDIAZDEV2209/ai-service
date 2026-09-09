@@ -32,7 +32,5 @@ def simple_graph():
     """Grafo con LLM falso que responde siempre lo mismo (sin tools)."""
     # Objetos AIMessage DISTINTOS: add_messages deduplica por id y el historial
     # acumulado sería colapsado si reusáramos el mismo objeto.
-    fake = FakeToolAwareModel(
-        responses=[AIMessage(content=SIMPLE_ANSWER) for _ in range(10)]
-    )
+    fake = FakeToolAwareModel(responses=[AIMessage(content=SIMPLE_ANSWER) for _ in range(10)])
     return build_graph(model=fake, checkpointer=MemorySaver())

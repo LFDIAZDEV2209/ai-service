@@ -29,6 +29,11 @@ class AgentState(TypedDict, total=False):
     # Tools ejecutadas en el turno (reducer: acumula)
     tools_used: Annotated[list[str], operator.add]
 
+    # Sugerencias de acción estructuradas emitidas por tools durante el turno
+    # (p. ej. CTA de agenda de cita "Agenda tu cita aquí" para la app móvil;
+    # reducer: acumula — ver app/tools/appointment.py)
+    suggestions: Annotated[list[dict[str, Any]], operator.add]
+
     # Fuentes RAG usadas en el turno (metadata para auditoría)
     rag_sources: list[str]
 

@@ -53,7 +53,8 @@ def run_db_migrations() -> None:
 
     Alembic es idempotente (revisa `ai.alembic_version`).
     Además, `alembic/env.py` usa un Advisory Lock en PostgreSQL (`pg_advisory_lock`)
-    para que varias instancias al arrancar no colisionen ni dupliquen ejecuciones.
+    para que si varios workers o instancias arrancan a la vez,
+    no colisionen ni dupliquen ejecuciones.
     """
     settings = get_settings()
     if not settings.auto_migrate or not settings.database_url:

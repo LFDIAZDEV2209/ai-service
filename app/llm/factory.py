@@ -5,7 +5,6 @@ sin tocar la lógica del grafo: todo el resto del código habla con
 `BaseChatModel` de LangChain.
 """
 
-
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from app.core.config import get_settings
@@ -61,6 +60,4 @@ def get_chat_model(
             streaming=True,
         )
 
-    raise ConfigError(
-        f"Proveedor LLM desconocido: {provider!r}. Usa 'anthropic' u 'openai'."
-    )
+    raise ConfigError(f"Proveedor LLM desconocido: {provider!r}. Usa 'anthropic' u 'openai'.")

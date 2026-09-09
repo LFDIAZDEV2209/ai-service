@@ -99,11 +99,16 @@ class PgVectorStore:
             stmt = stmt.where(KnowledgeChunk.document_id == document_id)
 
         rows = (
-            await self._session.execute(
-                stmt.order_by(KnowledgeChunk.embedding.cosine_distance(query_vector))
-                .limit(top_k)
+            (
+                await self._session.execute(
+                    stmt.order_by(KnowledgeChunk.embedding.cosine_distance(query_vector)).limit(
+                        top_k
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         results: list[tuple[Chunk, float]] = []
         for row in rows:

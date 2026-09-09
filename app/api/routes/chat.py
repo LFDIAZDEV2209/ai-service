@@ -16,7 +16,13 @@ from langchain_core.messages import AIMessage, AIMessageChunk
 from app.agents.runtime_registry import AgentRuntimeError
 from app.agents.runtime_registry import registry as runtime_registry
 from app.api.deps import get_db_session, get_graph
-from app.api.schemas import ChatRequest, ChatResponse, FeedbackRequest, FeedbackResponse
+from app.api.schemas import (
+    ChatRequest,
+    ChatResponse,
+    ChatSuggestion,
+    FeedbackRequest,
+    FeedbackResponse,
+)
 from app.api.security import require_internal_key
 from app.core.config import get_settings
 from app.core.errors import CoppAiError
@@ -166,6 +172,25 @@ def _extract_answer(state: dict) -> str:
     return str(content)
 
 
+def _normalize_suggestions(raw: Any) -> list[ChatSuggestion]:
+    """Normaliza las sugerencias crudas del estado a `ChatSuggestion`.
+
+    Las entradas malformadas se descartan de forma defensiva (nunca deben
+    tumbar la respuesta del chat ni el evento done del stream).
+    """
+    suggestions: list[ChatSuggestion] = []
+    if not isinstance(raw, list):
+        return suggestions
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        try:
+            suggestions.append(ChatSuggestion.model_validate(item))
+        except Exception:
+            logger.debug("Sugerencia de chat descartada (malformada): %s", item)
+    return suggestions
+
+
 @router.post("", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
@@ -266,6 +291,7 @@ async def chat(
         tools_used=list(result.get("tools_used", [])),
         model=result.get("provider") or model,
         execution_id=execution_id,
+        suggestions=_normalize_suggestions(result.get("suggestions", [])),
     )
 
 
@@ -424,10 +450,17 @@ async def chat_stream(
                     latency_ms=latency_ms,
                 )
             await session.commit()
-        yield (
-            "event: done\ndata: "
-            f"{json.dumps({'thread_id': thread_id, 'execution_id': execution_id})}\n\n"
-        )
+        done_payload = {
+            "thread_id": thread_id,
+            "execution_id": execution_id,
+            "suggestions": [
+                s.model_dump()
+                for s in _normalize_suggestions(
+                    final_state.get("suggestions", []) if final_state else []
+                )
+            ],
+        }
+        yield f"event: done\ndata: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         event_generator(),

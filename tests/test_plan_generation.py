@@ -150,7 +150,7 @@ def test_extract_json_with_markdown_fences():
 
 
 def test_extract_json_with_plain_object():
-    text = "Esto es contexto. {\"plan\": {\"name\": \"x\"}} fin."
+    text = 'Esto es contexto. {"plan": {"name": "x"}} fin.'
     assert _extract_json(text) == {"plan": {"name": "x"}}
 
 
@@ -208,9 +208,7 @@ async def test_generate_plan_retries_once_on_invalid_then_succeeds():
             AIMessage(content=json.dumps({"type": "nutrition", "plan": NUTRITION_PLAN})),
         ]
     )
-    result = await generate_plan(
-        PlanGenerationRequest.model_validate(request_body()), model=fake
-    )
+    result = await generate_plan(PlanGenerationRequest.model_validate(request_body()), model=fake)
     assert result.plan["name"] == "Plan personalizado María"
 
 

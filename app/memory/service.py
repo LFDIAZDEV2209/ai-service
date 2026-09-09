@@ -38,7 +38,7 @@ Summarizer = Callable[[list[str], str | None], Awaitable[str]]
 
 async def _deterministic_summarizer(history: list[str], last_summary: str | None) -> str:
     """Resumen de respaldo sin LLM: primeros y últimos turnos concatenados."""
-    parts = history[:_SUMMARY_MIN_MESSAGES // 2] + history[-2:]
+    parts = history[: _SUMMARY_MIN_MESSAGES // 2] + history[-2:]
     return " | ".join(parts)
 
 

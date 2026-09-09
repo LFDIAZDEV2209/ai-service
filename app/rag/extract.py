@@ -57,8 +57,7 @@ def _extract_text_plain(content: bytes) -> str:
         text = content.decode("utf-8", errors="replace")
     if len(text) > MAX_DOCUMENT_CHARS:
         raise DocumentExtractionError(
-            f"Documento demasiado grande: {len(text)} caracteres "
-            f"(máximo {MAX_DOCUMENT_CHARS})."
+            f"Documento demasiado grande: {len(text)} caracteres (máximo {MAX_DOCUMENT_CHARS})."
         )
     return text
 
@@ -80,18 +79,13 @@ def _extract_pdf(content: bytes) -> str:
             pages.append(page.extract_text() or "")
     except Exception as exc:
         logger.warning("Error parseando PDF: %s", exc)
-        raise DocumentExtractionError(
-            f"No se pudo extraer texto del PDF: {exc}"
-        ) from exc
+        raise DocumentExtractionError(f"No se pudo extraer texto del PDF: {exc}") from exc
 
     text = "\n\n".join(pages).strip()
     if not text:
-        raise DocumentExtractionError(
-            "El PDF no contiene texto extraíble (¿está escaneado?)."
-        )
+        raise DocumentExtractionError("El PDF no contiene texto extraíble (¿está escaneado?).")
     if len(text) > MAX_DOCUMENT_CHARS:
         raise DocumentExtractionError(
-            f"Documento demasiado grande: {len(text)} caracteres "
-            f"(máximo {MAX_DOCUMENT_CHARS})."
+            f"Documento demasiado grande: {len(text)} caracteres (máximo {MAX_DOCUMENT_CHARS})."
         )
     return text

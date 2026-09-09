@@ -38,9 +38,7 @@ def test_extract_facts_nombre_y_edad():
 
 
 def test_extract_facts_preferencia_y_objetivo():
-    result = extract_facts(
-        "Prefiero comida vegetariana. Mi objetivo es bajar 10 kilos."
-    )
+    result = extract_facts("Prefiero comida vegetariana. Mi objetivo es bajar 10 kilos.")
     categories = {f.category for f in result.facts}
     assert CATEGORY_PREFERENCIA in categories
     assert CATEGORY_OBJETIVO in categories
@@ -98,35 +96,55 @@ class FakeStore:
         self.session = session
         self.saved: list[dict] = []
 
-    async def list_memories(self, *, user_id, agent_type_id, agent_instance_id=None,
-                            categories=None, limit=15) -> list[FakeMemory]:
+    async def list_memories(
+        self, *, user_id, agent_type_id, agent_instance_id=None, categories=None, limit=15
+    ) -> list[FakeMemory]:
         rows = [
-            r for r in self.session.rows
-            if r.user_id == user_id and r.agent_type_id == agent_type_id
+            r
+            for r in self.session.rows
+            if r.user_id == user_id
+            and r.agent_type_id == agent_type_id
             and (agent_instance_id is None or r.agent_instance_id == agent_instance_id)
         ]
         if categories:
             rows = [r for r in rows if r.category in categories]
         return sorted(rows, key=lambda r: r.importance, reverse=True)[:limit]
 
-    async def save_memory(self, *, user_id, agent_type_id, agent_instance_id,
-                          category, content, importance=0.5, source="chat",
-                          dedupe_key=None):
+    async def save_memory(
+        self,
+        *,
+        user_id,
+        agent_type_id,
+        agent_instance_id,
+        category,
+        content,
+        importance=0.5,
+        source="chat",
+        dedupe_key=None,
+    ):
         existing = None
         if dedupe_key is not None:
             existing = next(
-                (r for r in self.session.rows
-                 if r.user_id == user_id and r.agent_type_id == agent_type_id
-                 and r.content == dedupe_key),
+                (
+                    r
+                    for r in self.session.rows
+                    if r.user_id == user_id
+                    and r.agent_type_id == agent_type_id
+                    and r.content == dedupe_key
+                ),
                 None,
             )
         if existing is not None:
             existing.content = content
             return existing
         mem = FakeMemory(
-            user_id=user_id, agent_type_id=agent_type_id,
-            agent_instance_id=agent_instance_id, category=category,
-            content=content, importance=importance, source=source,
+            user_id=user_id,
+            agent_type_id=agent_type_id,
+            agent_instance_id=agent_instance_id,
+            category=category,
+            content=content,
+            importance=importance,
+            source=source,
         )
         self.session.add(mem)
         self.saved.append(mem.__dict__)
@@ -162,12 +180,24 @@ def make_service(session: FakeSession, summarizer=None) -> UserMemoryService:
 
 async def test_aislamiento_entre_usuarios():
     """La memoria de un usuario nunca aparece en el contexto de otro."""
-    session = FakeSession([
-        FakeMemory(user_id=USER_A, agent_type_id=AGENT_DOC, category="personal",
-                   content="Me llamo Ana", importance=0.9),
-        FakeMemory(user_id=USER_B, agent_type_id=AGENT_DOC, category="clinico",
-                   content="Soy alergico a penicilina", importance=0.9),
-    ])
+    session = FakeSession(
+        [
+            FakeMemory(
+                user_id=USER_A,
+                agent_type_id=AGENT_DOC,
+                category="personal",
+                content="Me llamo Ana",
+                importance=0.9,
+            ),
+            FakeMemory(
+                user_id=USER_B,
+                agent_type_id=AGENT_DOC,
+                category="clinico",
+                content="Soy alergico a penicilina",
+                importance=0.9,
+            ),
+        ]
+    )
     svc = make_service(session)
 
     ctx_a = await svc.load_context(user_id=USER_A, agent_type_id=AGENT_DOC)
@@ -181,10 +211,17 @@ async def test_aislamiento_entre_usuarios():
 
 async def test_aislamiento_entre_agentes_del_mismo_usuario():
     """Las memorias de un agente no se inyectan en otro agente."""
-    session = FakeSession([
-        FakeMemory(user_id=USER_A, agent_type_id=AGENT_PSY, category="personal",
-                   content="Tengo ansiedad", importance=0.9),
-    ])
+    session = FakeSession(
+        [
+            FakeMemory(
+                user_id=USER_A,
+                agent_type_id=AGENT_PSY,
+                category="personal",
+                content="Tengo ansiedad",
+                importance=0.9,
+            ),
+        ]
+    )
     svc = make_service(session)
 
     ctx_psy = await svc.load_context(user_id=USER_A, agent_type_id=AGENT_PSY)
@@ -200,15 +237,26 @@ async def test_load_context_sin_memorias_devuelve_vacio():
 
 
 async def test_load_context_respeta_categorias():
-    session = FakeSession([
-        FakeMemory(user_id=USER_A, agent_type_id=AGENT_DOC, category="personal",
-                   content="Me llamo Ana", importance=0.9),
-        FakeMemory(user_id=USER_A, agent_type_id=AGENT_DOC, category="resumen",
-                   content="resumen de conversacion", importance=0.6),
-    ])
+    session = FakeSession(
+        [
+            FakeMemory(
+                user_id=USER_A,
+                agent_type_id=AGENT_DOC,
+                category="personal",
+                content="Me llamo Ana",
+                importance=0.9,
+            ),
+            FakeMemory(
+                user_id=USER_A,
+                agent_type_id=AGENT_DOC,
+                category="resumen",
+                content="resumen de conversacion",
+                importance=0.6,
+            ),
+        ]
+    )
     svc = make_service(session)
-    ctx = await svc.load_context(user_id=USER_A, agent_type_id=AGENT_DOC,
-                                 categories=["resumen"])
+    ctx = await svc.load_context(user_id=USER_A, agent_type_id=AGENT_DOC, categories=["resumen"])
     assert "resumen" in ctx
     assert "Ana" not in ctx
 
@@ -221,7 +269,9 @@ async def test_extract_and_save_persiste_hechos():
     svc = make_service(session)
 
     saved = await svc.extract_and_save(
-        user_id=USER_A, agent_type_id=AGENT_DOC, agent_instance_id=None,
+        user_id=USER_A,
+        agent_type_id=AGENT_DOC,
+        agent_instance_id=None,
         message="Me llamo Ana y prefiero comida vegetariana.",
     )
 
@@ -238,7 +288,9 @@ async def test_extract_and_save_sin_hechos_no_guarda():
     svc = make_service(session)
 
     saved = await svc.extract_and_save(
-        user_id=USER_A, agent_type_id=AGENT_DOC, agent_instance_id=None,
+        user_id=USER_A,
+        agent_type_id=AGENT_DOC,
+        agent_instance_id=None,
         message="Hola, ¿cómo estás?",
     )
 
@@ -252,11 +304,15 @@ async def test_save_deduplica_por_clave():
     svc = make_service(session)
 
     await svc.extract_and_save(
-        user_id=USER_A, agent_type_id=AGENT_DOC, agent_instance_id=None,
+        user_id=USER_A,
+        agent_type_id=AGENT_DOC,
+        agent_instance_id=None,
         message="Me llamo Ana.",
     )
     await svc.extract_and_save(
-        user_id=USER_A, agent_type_id=AGENT_DOC, agent_instance_id=None,
+        user_id=USER_A,
+        agent_type_id=AGENT_DOC,
+        agent_instance_id=None,
         message="Me llamo Ana otra vez.",
     )
 
@@ -272,7 +328,9 @@ async def test_resumen_rodante_con_historico_corto_no_rota():
     svc = make_service(session, summarizer=FakeSummarizer())
 
     result = await svc.maybe_roll_summary(
-        user_id=USER_A, agent_type_id=AGENT_DOC, agent_instance_id=None,
+        user_id=USER_A,
+        agent_type_id=AGENT_DOC,
+        agent_instance_id=None,
         history=["hola", "hola que tal"],
     )
 
@@ -287,7 +345,9 @@ async def test_resumen_rodante_con_historico_largo_rota():
 
     history = [f"mensaje {i}" for i in range(8)]
     result = await svc.maybe_roll_summary(
-        user_id=USER_A, agent_type_id=AGENT_DOC, agent_instance_id=None,
+        user_id=USER_A,
+        agent_type_id=AGENT_DOC,
+        agent_instance_id=None,
         history=history,
     )
 
@@ -303,7 +363,9 @@ async def test_resumen_rodante_fallback_determinista_sin_llm():
 
     history = [f"mensaje {i}" for i in range(8)]
     result = await svc.maybe_roll_summary(
-        user_id=USER_A, agent_type_id=AGENT_DOC, agent_instance_id=None,
+        user_id=USER_A,
+        agent_type_id=AGENT_DOC,
+        agent_instance_id=None,
         history=history,
     )
 
@@ -318,7 +380,9 @@ async def test_resumen_rodante_aislado_por_usuario():
 
     history = [f"m{i}" for i in range(8)]
     await svc.maybe_roll_summary(
-        user_id=USER_A, agent_type_id=AGENT_DOC, agent_instance_id=None,
+        user_id=USER_A,
+        agent_type_id=AGENT_DOC,
+        agent_instance_id=None,
         history=history,
     )
 

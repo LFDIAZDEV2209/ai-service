@@ -39,8 +39,21 @@ def calculate(expression: str) -> str:
     Args:
         expression: expresión aritmética, ej: "(12 + 8) * 2".
     """
-    allowed = (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant, ast.Add, ast.Sub,
-               ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow, ast.USub, ast.UAdd)
+    allowed = (
+        ast.Expression,
+        ast.BinOp,
+        ast.UnaryOp,
+        ast.Constant,
+        ast.Add,
+        ast.Sub,
+        ast.Mult,
+        ast.Div,
+        ast.FloorDiv,
+        ast.Mod,
+        ast.Pow,
+        ast.USub,
+        ast.UAdd,
+    )
     try:
         tree = ast.parse(expression, mode="eval")
         for node in ast.walk(tree):

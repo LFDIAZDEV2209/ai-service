@@ -165,6 +165,7 @@ class ExecutionTracker:
             "answer": answer or None,
             "tools_used": result_state.get("tools_used", []),
             "rag_sources": extract_rag_sources(messages),
+            "suggestions": result_state.get("suggestions", []),
             "provider": result_state.get("provider") or model,
             "model": model or result_state.get("provider"),
         }

@@ -35,28 +35,41 @@ def sanitize_input(input_text: str, max_length: int | None = None) -> str:
 INJECTION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     # Inglés
     ("ignore instructions", re.compile(r"ignore\s+(?:\w+\s+){0,3}instructions?", re.I)),
-    ("forget instructions", re.compile(
-        r"forget\s+(everything|all|your\s+instructions?|what\s+you\s+were\s+told)", re.I)),
+    (
+        "forget instructions",
+        re.compile(
+            r"forget\s+(everything|all|your\s+instructions?|what\s+you\s+were\s+told)", re.I
+        ),
+    ),
     ("you are now", re.compile(r"you\s+are\s+now\s+", re.I)),
     ("act as", re.compile(r"act\s+as\s+(if\s+)?you\s+(are|were)\s+", re.I)),
     ("disregard", re.compile(r"disregard\s+(your|all|previous|the)\s+", re.I)),
     ("new instructions", re.compile(r"new\s+instructions?\s*:", re.I)),
     ("system override", re.compile(r"system\s*:?\s*you\s+", re.I)),
-    ("override system prompt", re.compile(
-        r"override\s+(the\s+)?(system\s+prompt|your\s+instructions?)", re.I)),
+    (
+        "override system prompt",
+        re.compile(r"override\s+(the\s+)?(system\s+prompt|your\s+instructions?)", re.I),
+    ),
     # Español
-    ("ignorar instrucciones (es)", re.compile(
-        r"ignora\s+(las\s+)?(instrucciones?\s+)?(anteriores?|previas?|todas?)", re.I)),
-    ("olvida instrucciones (es)", re.compile(
-        r"olvida\s+(todo|las\s+instrucciones?|lo\s+que\s+te\s+(dijeron|indicaron))", re.I)),
+    (
+        "ignorar instrucciones (es)",
+        re.compile(r"ignora\s+(las\s+)?(instrucciones?\s+)?(anteriores?|previas?|todas?)", re.I),
+    ),
+    (
+        "olvida instrucciones (es)",
+        re.compile(
+            r"olvida\s+(todo|las\s+instrucciones?|lo\s+que\s+te\s+(dijeron|indicaron))", re.I
+        ),
+    ),
     ("ahora eres (es)", re.compile(r"ahora\s+(eres|serás|actúas?\s+como)\s+", re.I)),
-    ("actúa como (es)", re.compile(
-        r"act[uú]a\s+(como\s+si\s+)?(fueras?|eres)\s+", re.I)),
+    ("actúa como (es)", re.compile(r"act[uú]a\s+(como\s+si\s+)?(fueras?|eres)\s+", re.I)),
     ("nuevas instrucciones (es)", re.compile(r"nuevas?\s+instrucciones?\s*:", re.I)),
     ("ignora todo (es)", re.compile(r"ignora\s+todo\s+(lo\s+anterior|lo\s+que\s+)", re.I)),
     ("eres libre (es)", re.compile(r"eres\s+libre\s+(de|para)\s+", re.I)),
-    ("sin restricciones (es)", re.compile(
-        r"sin\s+(ninguna\s+)?(restricci[oó]n|l[ií]mite|instrucci[oó]n)", re.I)),
+    (
+        "sin restricciones (es)",
+        re.compile(r"sin\s+(ninguna\s+)?(restricci[oó]n|l[ií]mite|instrucci[oó]n)", re.I),
+    ),
 ]
 
 

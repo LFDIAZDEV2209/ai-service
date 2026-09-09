@@ -23,9 +23,7 @@ VERSION_ID = "22222222-2222-2222-2222-222222222222"
 
 def make_fake_model_factory(**overrides):
     def factory(**kwargs):
-        return FakeToolAwareModel(
-            responses=[AIMessage(content="respuesta") for _ in range(5)]
-        )
+        return FakeToolAwareModel(responses=[AIMessage(content="respuesta") for _ in range(5)])
 
     return factory
 
@@ -67,9 +65,7 @@ def test_runtime_config_defaults():
 
 
 def test_runtime_config_prompt_compuesto():
-    config = AgentRuntimeConfig.model_validate(
-        {"system_prompt": "base", "prompt": "extra"}
-    )
+    config = AgentRuntimeConfig.model_validate({"system_prompt": "base", "prompt": "extra"})
     assert config.effective_system_prompt() == "base\n\nextra"
 
 

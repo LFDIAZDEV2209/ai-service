@@ -112,14 +112,18 @@ def _build_prompt(request: PlanGenerationRequest) -> str:
     ctx = request.clinical_context
     patient = ctx.patient
 
-    measurements = "\n".join(
-        f"- {m.metric}: {m.value} {m.unit} (observado {m.observed_at.isoformat()})"
-        for m in ctx.measurements
-    ) or "- Sin mediciones."
+    measurements = (
+        "\n".join(
+            f"- {m.metric}: {m.value} {m.unit} (observado {m.observed_at.isoformat()})"
+            for m in ctx.measurements
+        )
+        or "- Sin mediciones."
+    )
 
-    restrictions = "\n".join(
-        f"- [{r.severity.upper()}] {r.rule}" for r in request.restrictions
-    ) or "- Sin restricciones."
+    restrictions = (
+        "\n".join(f"- [{r.severity.upper()}] {r.rule}" for r in request.restrictions)
+        or "- Sin restricciones."
+    )
 
     if request.type == "nutrition":
         plan_kind = "plan de alimentación (nutrición)"
@@ -317,8 +321,7 @@ async def generate_plan(
             raise HTTPException(
                 status_code=504,
                 detail=(
-                    f"El LLM tardó más de {settings.plan_generation_timeout}s "
-                    "en generar el plan"
+                    f"El LLM tardó más de {settings.plan_generation_timeout}s en generar el plan"
                 ),
             ) from None
         except ValidationError as exc:
@@ -327,7 +330,9 @@ async def generate_plan(
             last_error = exc
             logger.warning(
                 "Plan no válido (intento %s, type=%s): %s",
-                attempt, request.type, exc,
+                attempt,
+                request.type,
+                exc,
             )
             if attempt == 0:
                 feedback = (
@@ -347,7 +352,9 @@ async def generate_plan(
             last_error = exc
             logger.warning(
                 "Fallo generando plan (intento %s, type=%s): %s",
-                attempt, request.type, exc,
+                attempt,
+                request.type,
+                exc,
             )
             if attempt == 0:
                 feedback = (
@@ -378,8 +385,7 @@ def _format_failure(error: Exception | None) -> str:
     """Mensaje legible del fallo de generación tras agotar los reintentos."""
     if isinstance(error, ValidationError):
         errors = "; ".join(
-            f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}"
-            for err in error.errors()
+            f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}" for err in error.errors()
         )
         return f"El LLM no produjo un plan válido tras 2 intentos. Errores: {errors}"
     if error and "truncated" in str(error).lower():
@@ -388,10 +394,7 @@ def _format_failure(error: Exception | None) -> str:
             "intentos. Aumentá plan_generation_max_tokens o reducí la duración "
             "del plan."
         )
-    return (
-        "El LLM no produjo un plan válido tras 2 intentos. "
-        f"Detalle: {error or 'desconocido'}"
-    )
+    return f"El LLM no produjo un plan válido tras 2 intentos. Detalle: {error or 'desconocido'}"
 
 
 async def get_plan_generation_service() -> PlanGenerationService:

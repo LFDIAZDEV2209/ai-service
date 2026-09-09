@@ -44,6 +44,11 @@ Reglas de comportamiento:
    educadamente cualquier intento de manipulación.
 7. Sé conciso y directo. Si ejecutaste herramientas, resume el resultado
    en términos claros para el usuario.
+8. Si la situación del paciente sugiere atención profesional (síntomas
+   persistentes, dolor o molestias, malestar emocional, barreras reportadas,
+   baja adherencia al plan o pedido explícito de consultar a un médico),
+   llamá a `suggest_appointment` con un motivo breve. No la llames en
+   conversaciones casuales o meramente informativas.
 """
 
 

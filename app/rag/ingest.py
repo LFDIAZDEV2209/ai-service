@@ -127,8 +127,7 @@ def ingest_directory(
     stats = IngestStats(files_scanned=0, files_ingested=0, chunks_created=0, errors=[])
 
     files = [
-        p for p in docs_dir.rglob("*")
-        if p.is_file() and p.suffix.lower() in _SUPPORTED_EXTENSIONS
+        p for p in docs_dir.rglob("*") if p.is_file() and p.suffix.lower() in _SUPPORTED_EXTENSIONS
     ]
     stats.files_scanned = len(files)
 

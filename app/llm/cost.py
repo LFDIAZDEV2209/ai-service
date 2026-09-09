@@ -7,9 +7,9 @@ from langchain_core.messages import AIMessage
 # Precio USD por millón de tokens (aproximado, actualizable):
 #   [input, output]
 MODEL_PRICING: dict[str, tuple[float, float]] = {
-    "claude": (3.0, 15.0),          # familia Claude Sonnet (aprox)
-    "gpt-4o": (2.5, 10.0),          # familia GPT-4o (aprox)
-    "default": (1.0, 3.0),          # fallback conservador
+    "claude": (3.0, 15.0),  # familia Claude Sonnet (aprox)
+    "gpt-4o": (2.5, 10.0),  # familia GPT-4o (aprox)
+    "default": (1.0, 3.0),  # fallback conservador
 }
 
 
@@ -49,10 +49,7 @@ class SessionStats:
 
     def estimate_cost_usd(self) -> float:
         in_price, out_price = _price_for(self.model)
-        return (
-            self.input_tokens / 1_000_000 * in_price
-            + self.output_tokens / 1_000_000 * out_price
-        )
+        return self.input_tokens / 1_000_000 * in_price + self.output_tokens / 1_000_000 * out_price
 
     def to_dict(self) -> dict:
         return {

@@ -25,6 +25,7 @@ async def lifespan(_app: FastAPI):
     settings = get_settings()
     if settings.auto_migrate and settings.database_url:
         from app.db.engine import run_db_migrations
+
         await asyncio.to_thread(run_db_migrations)
     yield
 

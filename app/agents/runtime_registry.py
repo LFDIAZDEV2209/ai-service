@@ -59,11 +59,11 @@ class AgentRuntimeRegistry:
         checkpointer_factory: Callable[[], Any] | None = None,
     ) -> None:
         """Args:
-            model_factory: fábrica de modelos LLM (por defecto `get_chat_model`);
-                inyectable en tests para usar un fake sin API key.
-            checkpointer_factory: fábrica del checkpointer (por defecto
-                `get_checkpointer` — async); inyectable en tests para usar
-                `MemorySaver` sin Postgres.
+        model_factory: fábrica de modelos LLM (por defecto `get_chat_model`);
+            inyectable en tests para usar un fake sin API key.
+        checkpointer_factory: fábrica del checkpointer (por defecto
+            `get_checkpointer` — async); inyectable en tests para usar
+            `MemorySaver` sin Postgres.
         """
         self._model_factory = model_factory or get_chat_model
         self._checkpointer_factory = checkpointer_factory

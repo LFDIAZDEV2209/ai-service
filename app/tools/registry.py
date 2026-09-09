@@ -1,22 +1,28 @@
 """Registro central de herramientas (patrón del curso: definición separada de ejecución).
 
-Cada tool se define en `app/tools/builtin.py` con el decorador `@tool` de LangChain,
-que deriva su esquema JSON automáticamente de la firma + docstring.
-Aquí se recolectan una sola vez y se exponen al LLM vía `bind_tools`.
+Cada tool se define en un módulo de `app/tools/` (builtin, appointment...) con
+el decorador `@tool` de LangChain, que deriva su esquema JSON automáticamente
+de la firma + docstring. Aquí se recolectan una sola vez y se exponen al LLM
+vía `bind_tools`. Para registrar un módulo nuevo, agregalo a `_TOOL_MODULES`.
 """
 
 from langchain_core.tools import BaseTool
 
-from app.tools import builtin
+from app.tools import appointment, builtin
+
+# Módulos escaneados en busca de tools decoradas con @tool (orden no importa:
+# el resultado final se ordena por nombre).
+_TOOL_MODULES = (builtin, appointment)
 
 
 def _collect_tools() -> list[BaseTool]:
-    """Recolecta todas las tools decoradas con @tool del módulo builtin."""
+    """Recolecta todas las tools decoradas con @tool de los módulos registrados."""
     tools: list[BaseTool] = []
-    for name in dir(builtin):
-        obj = getattr(builtin, name)
-        if isinstance(obj, BaseTool):
-            tools.append(obj)
+    for module in _TOOL_MODULES:
+        for name in dir(module):
+            obj = getattr(module, name)
+            if isinstance(obj, BaseTool):
+                tools.append(obj)
     return sorted(tools, key=lambda t: t.name)
 
 

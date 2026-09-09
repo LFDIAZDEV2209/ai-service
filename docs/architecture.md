@@ -143,7 +143,7 @@ POST /api/v1/chat
 ```python
 result = await graph.ainvoke(
     {"input": message, "agent": agent},
-    config={"configurable": {"thread_id": thread_id}, "recursion_limit": 25}
+    config={"configurable": {"thread_id": thread_id}, "recursion_limit": 25},
 )
 ```
 

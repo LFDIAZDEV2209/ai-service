@@ -86,20 +86,28 @@ async def _load_extra(execution: AgentExecution, session: AsyncSession) -> dict:
     extra: dict = {"feedback_rating": None, "feedback_comment": None}
 
     feedbacks = (
-        await session.execute(
-            select(AgentFeedback).where(AgentFeedback.thread_id == execution.thread_id)
+        (
+            await session.execute(
+                select(AgentFeedback).where(AgentFeedback.thread_id == execution.thread_id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     if feedbacks:
         last = max(feedbacks, key=lambda f: f.created_at)
         extra["feedback_rating"] = last.rating
         extra["feedback_comment"] = last.comment
 
     evaluations = (
-        await session.execute(
-            select(AgentEvaluation).where(AgentEvaluation.execution_id == execution.id)
+        (
+            await session.execute(
+                select(AgentEvaluation).where(AgentEvaluation.execution_id == execution.id)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     extra["evaluations"] = [
         {
             "evaluator": e.evaluator,
@@ -109,17 +117,19 @@ async def _load_extra(execution: AgentExecution, session: AsyncSession) -> dict:
         }
         for e in evaluations
     ]
-    extra["best_evaluation"] = (
-        max((e.score for e in evaluations), default=None)
-    )
+    extra["best_evaluation"] = max((e.score for e in evaluations), default=None)
 
     experiences = (
-        await session.execute(
-            select(AgentExperience).where(
-                AgentExperience.agent_type_id == execution.agent_type_id
+        (
+            await session.execute(
+                select(AgentExperience).where(
+                    AgentExperience.agent_type_id == execution.agent_type_id
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     extra["experiences"] = [
         {
             "trigger": e.trigger_pattern,
@@ -175,20 +185,22 @@ async def list_executions(
         conditions.append(AgentExecution.status == status)
 
     total = (
-        await session.execute(
-            select(func.count(AgentExecution.id)).where(*conditions)
-        )
+        await session.execute(select(func.count(AgentExecution.id)).where(*conditions))
     ).scalar_one()
 
     rows = (
-        await session.execute(
-            select(AgentExecution)
-            .where(*conditions)
-            .order_by(AgentExecution.created_at.desc())
-            .offset(offset)
-            .limit(limit)
+        (
+            await session.execute(
+                select(AgentExecution)
+                .where(*conditions)
+                .order_by(AgentExecution.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     items: list[ExecutionSummary] = []
     for row in rows:
@@ -228,9 +240,7 @@ async def get_execution(
         raise HTTPException(status_code=404, detail="Ejecución no encontrada") from None
 
     row = (
-        await session.execute(
-            select(AgentExecution).where(AgentExecution.id == execution_id)
-        )
+        await session.execute(select(AgentExecution).where(AgentExecution.id == execution_id))
     ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Ejecución no encontrada")

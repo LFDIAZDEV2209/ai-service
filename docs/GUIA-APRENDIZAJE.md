@@ -225,9 +225,9 @@ Punto de entrada: crea la app FastAPI (`create_app()`) y permite
 ### `config.py` — la fuente única de verdad
 ```python
 class Settings(BaseSettings):
-    llm_provider: str = "anthropic"      # "anthropic" | "openai"
+    llm_provider: str = "anthropic"  # "anthropic" | "openai"
     anthropic_api_key: str | None = None
-    database_url: str | None = None      # None → MemorySaver
+    database_url: str | None = None  # None → MemorySaver
     ...
 ```
 - `pydantic-settings` lee las variables de entorno **y valida los tipos** al
@@ -310,6 +310,7 @@ def _collect_tools():
         if isinstance(obj, BaseTool):
             tools.append(obj)
 
+
 ALL_TOOLS: list[BaseTool] = _collect_tools()
 ```
 - Escanea `builtin.py` y junta todo lo decorado con `@tool`. **Añadir una tool
@@ -389,10 +390,12 @@ apuntar a un store compartido.
 def get_checkpointer():
     if settings.database_url:
         from langgraph.checkpoint.postgres import PostgresSaver
+
         checkpointer = PostgresSaver.from_conn_string(settings.database_url)
-        checkpointer.setup()   # crea las tablas
+        checkpointer.setup()  # crea las tablas
         return checkpointer
     from langgraph.checkpoint.memory import MemorySaver
+
     return MemorySaver()
 ```
 - Sin `DATABASE_URL` → `MemorySaver`: guarda el estado en RAM (perfecto para
@@ -414,9 +417,9 @@ cliente, etc. Interfaz + implementación JSON (dev). En producción se migra al
 ```python
 class AgentState(TypedDict, total=False):
     input: str
-    messages: Annotated[list[AnyMessage], add_messages]   # ← reducer
+    messages: Annotated[list[AnyMessage], add_messages]  # ← reducer
     guardrail: dict[str, Any]
-    tools_used: Annotated[list[str], operator.add]         # ← reducer
+    tools_used: Annotated[list[str], operator.add]  # ← reducer
     rag_sources: list[str]
     provider: str
     agent: str
@@ -502,13 +505,16 @@ rechazar manipulación...). Cada agente especializado tendrá el suyo.
 ```python
 @dataclass(frozen=True)
 class AgentProfile:
-    key: str; name: str; description: str
+    key: str
+    name: str
+    description: str
     system_prompt: str
     provider: str | None = None
     model: str | None = None
     tools: tuple[str, ...] = ()
 
-AGENTS = {"base": AgentProfile(...)}   # + TODOs: doctor, psychologist, crm...
+
+AGENTS = {"base": AgentProfile(...)}  # + TODOs: doctor, psychologist, crm...
 ```
 Catálogo de agentes. Cuando exista lógica de negocio, agregas perfiles aquí y
 sus subgrafos en `graph/`.

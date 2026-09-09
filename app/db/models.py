@@ -46,7 +46,9 @@ def _uuid() -> Mapped[str]:
 def _timestamptz(name: str, nullable: bool = False, default_now: bool = False) -> Mapped[datetime]:
     """Columna de timestamp con timezone."""
     return mapped_column(
-        name, DateTime(timezone=True), nullable=nullable,
+        name,
+        DateTime(timezone=True),
+        nullable=nullable,
         server_default=text("now()") if default_now else None,
     )
 

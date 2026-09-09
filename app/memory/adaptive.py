@@ -204,8 +204,8 @@ class AdaptiveMemoryService:
         incrementa `recurrence_count` y promedia `success_rating`. El outcome
         es success/error según el rating (>=4 → éxito).
         """
-        trigger = trigger.strip()[: _MAX_TRIGGER_CHARS]
-        response = response.strip()[: _MAX_RESPONSE_CHARS]
+        trigger = trigger.strip()[:_MAX_TRIGGER_CHARS]
+        response = response.strip()[:_MAX_RESPONSE_CHARS]
         if not trigger or not response:
             raise AdaptiveMemoryError("Trigger y response son obligatorios para la experiencia.")
 
@@ -268,9 +268,7 @@ class AdaptiveMemoryService:
                 AgentExperience.recurrence_count >= min_recurrence,
             )
             .order_by(
-                (
-                    AgentExperience.recurrence_count * AgentExperience.success_rating
-                ).desc(),
+                (AgentExperience.recurrence_count * AgentExperience.success_rating).desc(),
                 AgentExperience.last_used_at.desc().nullslast(),
             )
             .limit(limit)
@@ -298,6 +296,4 @@ class AdaptiveMemoryService:
             f"- Disparador: {e.trigger_pattern}\n  Respuesta efectiva: {e.response_pattern}"
             for e in experiences
         ]
-        return "Experiencia aprendida del agente (patrones que funcionaron):\n" + "\n".join(
-            blocks
-        )
+        return "Experiencia aprendida del agente (patrones que funcionaron):\n" + "\n".join(blocks)
