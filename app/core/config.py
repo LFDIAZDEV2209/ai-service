@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o"
     openai_embedding_model: str = "text-embedding-3-small"
 
+    # Narración empática de exámenes de laboratorio — endpoint /chat/lab-exam/narrate.
+    # Tier económico dedicado (gpt-4o-mini), separado del modelo de extracción.
+    empathetic_provider: str = "openai"
+    empathetic_model: str = "gpt-4o-mini"
+    empathetic_temperature: float = 0.5
+    empathetic_max_tokens: int = 400
+    # Timeout de la llamada LLM única de narración; cualquier fallo degrada a 200
+    # con `empathetic_message` vacío (nunca 5xx por problemas de narración).
+    empathetic_timeout: float = 20.0
+
     # Agente
     max_tool_calls: int = 8
     recursion_limit: int = 25

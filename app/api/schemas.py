@@ -155,3 +155,50 @@ class LabExamResponse(BaseModel):
         default=True,
         description="Indica si el documento fue legible o contiene texto extraíble.",
     )
+    empathetic_message: str = Field(
+        default="",
+        description=(
+            "Mensaje empático para el paciente (vacío si la narración no aplica o falló). "
+            "El backend lo prefiere sobre `summary` cuando no está vacío."
+        ),
+    )
+
+
+class PreviousMeasurement(BaseModel):
+    """Evolución pre-computada por el backend para una métrica del catálogo.
+
+    La aritmética (delta) y la dirección las calcula el backend; el LLM solo
+    narra. Los campos opcionales solo tienen sentido cuando `direction` no es
+    `first_record`.
+    """
+
+    direction: str = Field(description="worsened | improved | stable | changed | first_record")
+    previous_value: float | None = None
+    previous_unit: str | None = None
+    previous_date: datetime | None = None
+    delta: float | None = Field(default=None, description="current - previous (calculado en .NET)")
+    current_value: float | None = None
+    current_unit: str | None = None
+
+
+class NarrateRequest(BaseModel):
+    """Cuerpo del endpoint de narración empática (POST /chat/lab-exam/narrate)."""
+
+    metrics: list[LabExamMetric] = Field(
+        default_factory=list,
+        description="Métricas del examen actual (las mismas que devolvió la extracción).",
+    )
+    previous_measurements: dict[str, PreviousMeasurement] = Field(
+        default_factory=dict,
+        description="Evolución por métrica: dirección, delta y valores pre-computados en .NET.",
+    )
+    language: str | None = Field(
+        default=None,
+        description="Código de idioma ('es' | 'en'); ausente, vacío o desconocido ⇒ 'es'.",
+    )
+
+
+class NarrateResponse(BaseModel):
+    """Respuesta del endpoint de narración. Siempre 200; vacío ante cualquier fallo."""
+
+    empathetic_message: str = Field(default="", description="Mensaje empático generado.")

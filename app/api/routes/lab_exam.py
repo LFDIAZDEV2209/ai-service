@@ -9,6 +9,7 @@ Extrae exclusivamente las 14 métricas del catálogo clínico soportado:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import json
@@ -22,8 +23,9 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import ValidationError
 from pypdf import PdfReader
 
-from app.api.schemas import LabExamMetric, LabExamResponse
+from app.api.schemas import LabExamMetric, LabExamResponse, NarrateRequest, NarrateResponse
 from app.api.security import require_internal_key
+from app.core.config import get_settings
 from app.core.errors import ConfigError
 from app.llm.factory import get_chat_model
 from app.rag.extract import DocumentExtractionError, extract_text
@@ -105,6 +107,88 @@ def get_lab_exam_model() -> BaseChatModel:
             status_code=503,
             detail=f"Servicio no configurado: {exc}",
         ) from exc
+
+
+EMPATHETIC_PROMPT = """You are the ANTARES assistant, speaking in the first person to the
+patient who just uploaded a lab exam. Be warm, human and encouraging.
+
+The evolution table below was pre-computed by the backend: deltas and directions
+are final, do NOT calculate or recalculate anything:
+
+{metrics_table}
+
+{language_instruction}
+
+Structure the message exactly as:
+1. A short confirmation opener: the exam was received and processed.
+2. Highlight 3 to 4 metrics, preferring the most notable ones (worsened and
+   improved first, then first records). First-record metrics must be presented
+   without comparing them to previous values.
+3. An encouraging close. If any metric is "worsened", the close must suggest
+   reviewing it with the doctor.
+
+STRICT RULES:
+- No diagnoses, no medication advice, no alarmist language.
+- Never mention numeric reference ranges.
+- Keep the message under ~150 words.
+- Output only the message text, no preamble.
+"""
+
+
+def get_empathetic_model() -> BaseChatModel | None:
+    """Obtiene el modelo de narración empática (tier económico; inyectable para tests).
+
+    A diferencia de `get_lab_exam_model`, un problema de configuración NO produce
+    503: devuelve None y la ruta responde 200 con `empathetic_message` vacío.
+    """
+    try:
+        settings = get_settings()
+        return get_chat_model(
+            provider=settings.empathetic_provider,
+            model=settings.empathetic_model,
+            temperature=settings.empathetic_temperature,
+            max_tokens=settings.empathetic_max_tokens,
+        )
+    except ConfigError as exc:
+        logger.warning("narrate failed reason=config: %s", exc)
+        return None
+
+
+def _normalize_language(language: str | None) -> str:
+    """Normaliza el idioma: solo 'en' es inglés; ausente/vacío/desconocido ⇒ 'es'."""
+    return "en" if (language or "").strip().lower() == "en" else "es"
+
+
+def _language_instruction(language: str) -> str:
+    if language == "en":
+        return "The patient's language is English. Write the message in English."
+    return "The patient's language is Spanish. Write the message in Spanish."
+
+
+def _fmt_value(value: float | None, unit: str | None) -> str:
+    """Formatea un valor numérico con su unidad ('' si no hay valor)."""
+    if value is None:
+        return ""
+    unit_str = f" {unit}" if unit else ""
+    return f"{value:g}{unit_str}"
+
+
+def _render_metrics_table(previous_measurements: dict[str, Any]) -> str:
+    """Renderiza la tabla de evolución pre-computada (deltas verbatim, sin aritmética)."""
+    lines: list[str] = []
+    for metric_name, prev in previous_measurements.items():
+        if prev.direction == "first_record":
+            lines.append(f"- {metric_name}: first_record — no previous measurement")
+            continue
+        unit = (prev.current_unit or prev.previous_unit or "").strip()
+        delta_str = f"{prev.delta:+g} {unit}".strip() if prev.delta is not None else "n/a"
+        previous = _fmt_value(prev.previous_value, prev.previous_unit)
+        current = _fmt_value(prev.current_value, prev.current_unit)
+        lines.append(
+            f"- {metric_name}: {prev.direction} (delta {delta_str}, previous {previous}"
+            f" → current {current})"
+        )
+    return "\n".join(lines) or "(no previous measurements)"
 
 
 def _extract_json(text: str) -> dict[str, Any]:
@@ -277,3 +361,43 @@ async def extract_lab_exam(
         summary=summary,
         metrics=valid_metrics,
     )
+
+
+@router.post("/lab-exam/narrate", response_model=NarrateResponse)
+async def narrate_lab_exam(
+    payload: NarrateRequest,
+    model: BaseChatModel | None = Depends(get_empathetic_model),
+) -> NarrateResponse:
+    """Genera un mensaje empático a partir de la tabla de evolución del backend.
+
+    Sin grafo, sin checkpointer y sin escrituras al schema `ai.`: una única
+    llamada LLM dentro de `asyncio.wait_for`. Cualquier fallo (config, timeout,
+    excepción del proveedor) degrada a HTTP 200 con `empathetic_message` vacío —
+    el endpoint NUNCA responde 5xx por problemas de narración.
+    """
+    if model is None:
+        return NarrateResponse(empathetic_message="")
+
+    language = _normalize_language(payload.language)
+    metrics_table = _render_metrics_table(payload.previous_measurements)
+    prompt = EMPATHETIC_PROMPT.format(
+        metrics_table=metrics_table,
+        language_instruction=_language_instruction(language),
+    )
+
+    try:
+        response = await asyncio.wait_for(
+            model.ainvoke([SystemMessage(content=prompt)]),
+            timeout=get_settings().empathetic_timeout,
+        )
+        content = response.content
+        message = content if isinstance(content, str) else str(content)
+    except TimeoutError:
+        logger.warning("narrate failed reason=timeout language=%s", language)
+        return NarrateResponse(empathetic_message="")
+    except Exception as exc:
+        logger.warning("narrate failed reason=exception language=%s: %s", language, exc)
+        return NarrateResponse(empathetic_message="")
+
+    logger.debug("narrate ok language=%s", language)
+    return NarrateResponse(empathetic_message=message.strip())
