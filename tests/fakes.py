@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.runnables import RunnableLambda
+from pydantic import Field
 
 
 class FakeToolAwareModel(FakeMessagesListChatModel):
@@ -46,6 +47,22 @@ class FakeToolAwareModel(FakeMessagesListChatModel):
             return schema.model_validate(plan_data)
 
         return RunnableLambda(_parse)
+
+
+class RecordingFakeModel(FakeToolAwareModel):
+    """FakeToolAwareModel que además captura cada prompt que recibe.
+
+    Permite verificar verbatim el prompt de sistema (p. ej. el bloque de guía
+    del control de programa) sin API keys. `_generate` es el embudo único por
+    el que pasan tanto `ainvoke` como `bind_tools(...).ainvoke` (el default de
+    `_agenerate` lo ejecuta en un executor).
+    """
+
+    prompts: list[list[BaseMessage]] = Field(default_factory=list)
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        self.prompts.append(list(messages))
+        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
 
 
 class FakeStructuredModel:
