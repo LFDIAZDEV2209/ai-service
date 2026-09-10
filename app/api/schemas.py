@@ -1,6 +1,6 @@
-"""Esquemas Pydantic de la API."""
+from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class ChatRequest(BaseModel):
@@ -120,3 +120,38 @@ class FeedbackResponse(BaseModel):
     rating: int
     experience_saved: bool
     outcome: str | None = None
+
+
+class LabExamMetric(BaseModel):
+    """Métrica clínica individual extraída de un examen de laboratorio."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    metric_name: str = Field(
+        validation_alias=AliasChoices("metric_name", "metric_key"),
+        description="Nombre canónico de la métrica en el catálogo.",
+    )
+    value: float = Field(description="Valor numérico de la medición.")
+    unit_symbol: str = Field(
+        default="",
+        validation_alias=AliasChoices("unit_symbol", "unit"),
+        description="Símbolo de la unidad de medida (ej: mg/dL, %, mmHg).",
+    )
+    observed_at: datetime | None = Field(
+        default=None,
+        description="Fecha y hora de observación si está presente en el documento.",
+    )
+
+
+class LabExamResponse(BaseModel):
+    """Respuesta estructurada de la extracción de exámenes de laboratorio."""
+
+    summary: str = Field(description="Resumen textual breve de las métricas detectadas.")
+    metrics: list[LabExamMetric] = Field(
+        default_factory=list,
+        description="Lista de métricas del catálogo extraídas del documento.",
+    )
+    readable: bool = Field(
+        default=True,
+        description="Indica si el documento fue legible o contiene texto extraíble.",
+    )

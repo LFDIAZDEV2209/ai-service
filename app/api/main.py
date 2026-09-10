@@ -7,7 +7,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import admin, agents, chat, health, ingest, internal, proactive, threads
+from app.api.routes import (
+    admin,
+    agents,
+    chat,
+    health,
+    ingest,
+    internal,
+    lab_exam,
+    proactive,
+    threads,
+)
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 
@@ -54,6 +64,7 @@ def create_app() -> FastAPI:
     prefix = settings.api_prefix
     app.include_router(health.router, prefix=prefix)
     app.include_router(chat.router, prefix=prefix)
+    app.include_router(lab_exam.router, prefix=prefix)
     app.include_router(threads.router, prefix=prefix)
     app.include_router(agents.router, prefix=prefix)
     app.include_router(ingest.router, prefix=prefix)
@@ -62,5 +73,6 @@ def create_app() -> FastAPI:
     # Endpoints internos (backend → AI Service); van fuera del prefix público.
     app.include_router(internal.router)
     app.include_router(proactive.router)
+    app.include_router(lab_exam.router)
 
     return app
