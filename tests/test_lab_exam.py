@@ -211,6 +211,21 @@ def test_endpoint_accessible_via_api_v1_prefix(test_app, fake_model_success):
         assert len(body["metrics"]) == 2
 
 
+def test_extraction_response_includes_empty_empathetic_message(test_app, fake_model_success):
+    """La respuesta de extracción incluye `empathetic_message` vacío (campo aditivo)."""
+    test_app.dependency_overrides[get_lab_exam_model] = lambda: fake_model_success
+
+    with TestClient(test_app) as client:
+        res = client.post(
+            "/chat/lab-exam",
+            headers=HEADERS,
+            data={"patient_id": "p-123", "batch_id": "b-456"},
+            files={"file": ("exam.jpg", b"fake-jpeg-content", "image/jpeg")},
+        )
+        assert res.status_code == 200
+        assert res.json()["empathetic_message"] == ""
+
+
 def test_missing_required_form_fields(test_app):
     """Falta de patient_id o batch_id retorna HTTP 422."""
     with TestClient(test_app) as client:
