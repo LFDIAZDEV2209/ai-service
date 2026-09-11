@@ -278,18 +278,24 @@ async def extract_lab_exam(
                         metrics=[],
                     )
 
-                content_list: list[dict[str, Any]] = [{
-                    "type": "text",
-                    "text": (
-                        "Analiza las páginas escaneadas del examen y extrae las métricas del "
-                        "catálogo."
-                    ),
-                }]
+                content_list: list[dict[str, Any]] = [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Analiza las páginas escaneadas del examen y extrae las métricas del "
+                            "catálogo."
+                        ),
+                    }
+                ]
                 for img_data in images_found[:3]:
-                    content_list.append({
-                        "type": "image_url",
-                        "image_url": {"url": f"data:{img_data['mime']};base64,{img_data['b64']}"},
-                    })
+                    content_list.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{img_data['mime']};base64,{img_data['b64']}"
+                            },
+                        }
+                    )
                 messages.append(HumanMessage(content=content_list))
             except Exception as exc:
                 logger.warning("Error extrayendo imágenes de PDF escaneado: %s", exc)

@@ -12,15 +12,11 @@ class ControlContext(BaseModel):
     422 (nunca 500).
     """
 
-    send_id: str = Field(
-        description="UUID del envío del control (app.program_controls.id)."
-    )
+    send_id: str = Field(description="UUID del envío del control (app.program_controls.id).")
     milestone_day: int = Field(
         ge=1, description="Día del hito del programa al que pertenece el control."
     )
-    status: str = Field(
-        description="Estado del control: sent | responded | followed_up."
-    )
+    status: str = Field(description="Estado del control: sent | responded | followed_up.")
     exam_pending: bool = Field(
         description="True si el examen de laboratorio sigue pendiente de subir."
     )

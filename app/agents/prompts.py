@@ -139,6 +139,4 @@ def build_control_guidance(day: int, status: str, exam_pending: bool) -> str:
         if status == "followed_up"
         else "El sistema puede re-ofrecerlo una vez más más adelante si hoy evade."
     )
-    return "\n".join(
-        line.format(day=day, reoffer=reoffer) for line in _CONTROL_GUIDANCE_LINES
-    )
+    return "\n".join(line.format(day=day, reoffer=reoffer) for line in _CONTROL_GUIDANCE_LINES)
