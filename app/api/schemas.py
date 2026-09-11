@@ -3,6 +3,29 @@ from datetime import datetime
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
+class ControlContext(BaseModel):
+    """Contexto del control de programa activo enviado por el backend .NET.
+
+    Solo está presente cuando el turno corresponde a un control de programa
+    abierto (recordatorio de subir el examen de laboratorio del día del hito).
+    Los cuatro campos son obligatorios; un contexto malformado se rechaza con
+    422 (nunca 500).
+    """
+
+    send_id: str = Field(
+        description="UUID del envío del control (app.program_controls.id)."
+    )
+    milestone_day: int = Field(
+        ge=1, description="Día del hito del programa al que pertenece el control."
+    )
+    status: str = Field(
+        description="Estado del control: sent | responded | followed_up."
+    )
+    exam_pending: bool = Field(
+        description="True si el examen de laboratorio sigue pendiente de subir."
+    )
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000, description="Mensaje del usuario")
     thread_id: str | None = Field(
@@ -26,6 +49,13 @@ class ChatRequest(BaseModel):
     agent_instance_id: str | None = Field(
         default=None,
         description="ID de la instancia de agente asignada al paciente.",
+    )
+    control_context: ControlContext | None = Field(
+        default=None,
+        description=(
+            "Contexto del control de programa activo (backend). Ausente o null ⇒ "
+            "comportamiento byte-idéntico al chat estándar (sin guía ni señal)."
+        ),
     )
 
 
@@ -56,6 +86,14 @@ class ChatResponse(BaseModel):
     suggestions: list[ChatSuggestion] = Field(
         default_factory=list,
         description="Sugerencias de acción estructuradas (p. ej. CTA de cita).",
+    )
+    control_signal: str | None = Field(
+        default=None,
+        description=(
+            "Señal estructurada del control de programa (p. ej. 'declined'). "
+            "Solo se emite cuando el paciente rechazó explícitamente subir su "
+            "examen; ausente/null en cualquier otro caso."
+        ),
     )
 
 

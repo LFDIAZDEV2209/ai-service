@@ -84,3 +84,57 @@ PSYCHOLOGY_SYSTEM_PROMPT = _specialized_prompt(
    servicio de emergencia de salud mental de inmediato.
 """,
 )
+
+
+# Control de programa (UC-001 'Controles'): guía por turno inyectada como
+# SystemMessage adicional SOLO cuando el backend envía `control_context` en el
+# request de chat. Voseo; nunca diagnostica, medica ni alarma; no inventa
+# números. Compacta (<15 líneas) por diseño.
+_CONTROL_GUIDANCE_LINES = (
+    "CONTROL DE PROGRAMA (válido solo para este turno):",
+    (
+        "- El paciente tiene abierto el control del día {day} y su examen de "
+        "laboratorio está pendiente de subir."
+    ),
+    "- Escuchá con calidez y empatía cómo se siente; validá lo que cuente, sin juzgar.",
+    (
+        "- Después, de forma natural, pedile que suba su examen por el botón de "
+        "adjuntar del chat (panel completo, tarda unos segundos)."
+    ),
+    (
+        "- Si acepta, confirmá con una frase cálida y dejá que el flujo de carga "
+        "siga solo; no des detalles técnicos."
+    ),
+    "- Si evade o pospone, no insistas en este turno. {reoffer}",
+    (
+        "- Si se niega de forma clara e inequívoca, respondé con calidez, respetá "
+        "su decisión, no vuelvas a insistir y llamá a la herramienta "
+        "`mark_control_declined`."
+    ),
+    "- Nunca diagnostiques, recomiendes medicación ni alarmes; no inventes números ni valores.",
+)
+
+
+def build_control_guidance(day: int, status: str, exam_pending: bool) -> str:
+    """Construye el bloque de guía para un turno con control de programa activo.
+
+    Con el examen ya subido (`exam_pending=False`) el bloque se reduce a
+    escucha cálida, sin pedir la subida ni mencionar la señal de rechazo. Con
+    `status="followed_up"` el turno es el último recordatorio del control (el
+    backend ya hizo el re-ofrecimiento único del plan).
+    """
+    if not exam_pending:
+        return (
+            "CONTROL DE PROGRAMA (válido solo para este turno): el paciente tiene "
+            f"abierto el control del día {day}, pero su examen ya está subido. "
+            "Escuchá con calidez y empatía cómo se siente y validá lo que cuente, "
+            "sin juzgar. No le pidas que suba nada."
+        )
+    reoffer = (
+        "Este turno es el último recordatorio del control."
+        if status == "followed_up"
+        else "El sistema puede re-ofrecerlo una vez más más adelante si hoy evade."
+    )
+    return "\n".join(
+        line.format(day=day, reoffer=reoffer) for line in _CONTROL_GUIDANCE_LINES
+    )

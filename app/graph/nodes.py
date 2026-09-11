@@ -12,7 +12,7 @@ from langchain_core.tools import BaseTool
 from langgraph.config import get_config
 from langgraph.prebuilt import ToolNode
 
-from app.agents.prompts import BASE_SYSTEM_PROMPT
+from app.agents.prompts import BASE_SYSTEM_PROMPT, build_control_guidance
 from app.agents.registry import AgentProfile
 from app.graph.state import AgentState
 from app.memory.adaptive import AdaptiveMemoryService
@@ -78,23 +78,40 @@ def make_agent_node(
         active_model = model.bind_tools(list(active_tools))
 
         history = list(state.get("messages", []))
-        prompt = [
-            SystemMessage(content=active_prompt),
-            *history,
-            HumanMessage(content=state.get("input", "")),
-        ]
+        system_blocks = [active_prompt]
 
         # Memoria de largo plazo: se inyecta como mensaje de sistema adicional
         # cuando el nodo de memoria la cargó (aislamiento por user_id).
         memory_context = state.get("memory_context")
         if memory_context:
-            prompt.insert(1, SystemMessage(content=memory_context))
+            system_blocks.append(memory_context)
 
         # Experiencia aprendida del agente: bloque SEPARADO de la memoria del
         # usuario (pertenece al agente, no al paciente).
         experience_context = state.get("experience_context")
         if experience_context:
-            prompt.insert(2, SystemMessage(content=experience_context))
+            system_blocks.append(experience_context)
+
+        # Control de programa (UC-001 'Controles'): guía por turno inyectada
+        # SOLO cuando el backend la envía. Viaja por `configurable` (no por
+        # state) para que nunca persista en el checkpointer entre turnos: un
+        # turno sin contexto no debe heredar la guía del turno anterior.
+        configurable = get_config().get("configurable", {})
+        control_context = configurable.get("control_context")
+        if control_context:
+            system_blocks.append(
+                build_control_guidance(
+                    day=control_context.get("milestone_day", 0),
+                    status=control_context.get("status", ""),
+                    exam_pending=control_context.get("exam_pending", True),
+                )
+            )
+
+        prompt = [
+            *[SystemMessage(content=block) for block in system_blocks],
+            *history,
+            HumanMessage(content=state.get("input", "")),
+        ]
 
         response = await active_model.ainvoke(prompt)
         return {

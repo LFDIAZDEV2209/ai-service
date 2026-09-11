@@ -23,6 +23,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from app.agents.prompts import BASE_SYSTEM_PROMPT, build_control_guidance
 from app.api.deps import get_db_session, get_graph
 from app.api.main import create_app
+from app.api.routes.chat import _rate_limiters
 from app.core.config import get_settings
 from app.graph.graph import build_graph
 from tests.fakes import FakeToolAwareModel, RecordingFakeModel
@@ -30,6 +31,21 @@ from tests.test_api import FakeDbSession
 
 INTERNAL_KEY = get_settings().internal_api_key
 HEADERS = {"X-Internal-Key": INTERNAL_KEY}
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiters():
+    """Aísla el rate limiter global entre tests.
+
+    `_rate_limiters` es estado de módulo compartido entre TODOS los tests del
+    proceso (clave por IP del TestClient). La ventana local (.env) es de 10
+    requests/60s; sin reset, los tests previos de la suite consumen el cupo y
+    estos tests recibirían 429.
+    """
+    _rate_limiters.clear()
+    yield
+    _rate_limiters.clear()
+
 
 CONTROL_CONTEXT = {
     "send_id": "3f2e9c1a-7b4d-4a8e-9c2f-1d5e6a7b8c90",
@@ -186,7 +202,7 @@ def test_guidance_block_static_contract():
     assert "adjuntar" in block  # botón de adjuntar del chat
     assert "segundos" in block  # panel completo, tarda segundos
     assert TOOL_CALL_NAME in block  # señal de rechazo vía tool
-    assert "escuchá" in block and "sin juzgar" in block  # escucha empática, voseo
+    assert "escuchá" in block.lower() and "sin juzgar" in block  # escucha empática, voseo
     assert "no inventes" in block  # nunca inventar números
 
 

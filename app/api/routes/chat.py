@@ -116,6 +116,12 @@ def _build_config(
             configurable["patient_id"] = request.patient_id
         if request.agent_instance_id:
             configurable["agent_instance_id"] = request.agent_instance_id
+        # Contexto del control de programa (backend .NET): viaja por config y
+        # NUNCA persiste en el checkpointer — es guía de UN turno. None cuando
+        # el turno no corresponde a un control (comportamiento byte-idéntico).
+        configurable["control_context"] = (
+            request.control_context.model_dump() if request.control_context is not None else None
+        )
 
     return {
         "configurable": configurable,
@@ -273,14 +279,24 @@ async def chat(
 
     await session.commit()
 
+    tools_used = list(result.get("tools_used", []))
+    # Señal del control de programa: SOLO cuando el turno trae contexto Y el
+    # modelo llamó la tool no-op de rechazo explícito. Sin contexto ⇒ None.
+    control_signal = (
+        "declined"
+        if request.control_context is not None and "mark_control_declined" in tools_used
+        else None
+    )
+
     return ChatResponse(
         thread_id=thread_id,
         answer=_extract_answer(result),
         agent=result.get("agent") or request.agent or request.agent_type_id or "base",
-        tools_used=list(result.get("tools_used", [])),
+        tools_used=tools_used,
         model=result.get("provider") or model,
         execution_id=execution_id,
         suggestions=_normalize_suggestions(result.get("suggestions", [])),
+        control_signal=control_signal,
     )
 
 
@@ -449,6 +465,17 @@ async def chat_stream(
                 )
             ],
         }
+        # Señal del control de programa (UC-001 'Controles'): evento propio
+        # DESPUÉS del stream de tokens y ANTES de `done`, solo cuando el turno
+        # traía contexto Y el modelo llamó la tool de rechazo explícito. El
+        # backend la consume y no la reenvía; la app móvil ignora líneas
+        # desconocidas. Sin contexto ⇒ nunca se emite.
+        if (
+            request.control_context is not None
+            and final_state is not None
+            and "mark_control_declined" in (final_state.get("tools_used") or [])
+        ):
+            yield "event: control_signal\ndata: declined\n\n"
         yield f"event: done\ndata: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
