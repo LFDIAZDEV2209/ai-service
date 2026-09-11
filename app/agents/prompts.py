@@ -91,19 +91,23 @@ PSYCHOLOGY_SYSTEM_PROMPT = _specialized_prompt(
 # request de chat. Voseo; nunca diagnostica, medica ni alarma; no inventa
 # números. Compacta (<15 líneas) por diseño.
 _CONTROL_GUIDANCE_LINES = (
-    "CONTROL DE PROGRAMA (válido solo para este turno):",
+    (
+        "CONTROL DE PROGRAMA (válido SOLO para este turno — cumplí estas "
+        "instrucciones en ESTA respuesta):"
+    ),
     (
         "- El paciente tiene abierto el control del día {day} y su examen de "
         "laboratorio está pendiente de subir."
     ),
-    "- Escuchá con calidez y empatía cómo se siente; validá lo que cuente, sin juzgar.",
+    "- Empezá validando con calidez lo que cuenta (1-2 frases), sin juzgar.",
     (
-        "- Después, de forma natural, pedile que suba su examen por el botón de "
-        "adjuntar del chat (panel completo, tarda unos segundos)."
+        "- En ESTA MISMA respuesta, pedile de forma natural que suba su examen por "
+        "el botón de adjuntar del chat (panel completo, tarda unos segundos). NO "
+        "postergues este pedido a un turno futuro ni lo reemplaces por otra pregunta."
     ),
     (
-        "- Si acepta, confirmá con una frase cálida y dejá que el flujo de carga "
-        "siga solo; no des detalles técnicos."
+        "- Si acepta o dice que lo hará, confirmá con una frase cálida y segui con "
+        "la charla; no des detalles técnicos."
     ),
     "- Si evade o pospone, no insistas en este turno. {reoffer}",
     (

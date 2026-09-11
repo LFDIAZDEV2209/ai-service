@@ -202,7 +202,8 @@ def test_guidance_block_static_contract():
     assert "adjuntar" in block  # botón de adjuntar del chat
     assert "segundos" in block  # panel completo, tarda segundos
     assert TOOL_CALL_NAME in block  # señal de rechazo vía tool
-    assert "escuchá" in block.lower() and "sin juzgar" in block  # escucha empática, voseo
+    assert "validando con calidez" in block and "sin juzgar" in block  # escucha empática, voseo
+    assert "ESTA MISMA respuesta" in block  # el pedido NO se posterga a turnos futuros
     assert "no inventes" in block  # nunca inventar números
 
 
