@@ -69,6 +69,11 @@ jobs:
           DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/test
           ENVIRONMENT: test
           INTERNAL_API_KEY: ci-test-key
+          # Claves dummy: los tests no llaman al LLM (usan fakes), pero la
+          # construcción del cliente del proveedor sí exige una key presente;
+          # sin ellas las rutas devuelven 503 antes de validar el request.
+          ANTHROPIC_API_KEY: ci-dummy-key
+          OPENAI_API_KEY: ci-dummy-key
 
   deploy:
     needs: test
