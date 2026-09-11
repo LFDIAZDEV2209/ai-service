@@ -114,10 +114,24 @@ class IngestResponse(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
+class ThreadMessageResponse(BaseModel):
+    """Mensaje individual del historial visible de una conversación."""
+
+    role: str = Field(description="Rol del emisor: 'user' (paciente) o 'bot' (agente).")
+    text: str = Field(description="Texto plano del mensaje (sin bloques internos de tool_use).")
+
+
 class ThreadStateResponse(BaseModel):
     thread_id: str
     message_count: int
     last_message: str | None = None
+    messages: list[ThreadMessageResponse] = Field(
+        default_factory=list,
+        description=(
+            "Historial visible de la conversación, en orden cronológico "
+            "(más reciente al final; máximo 100 mensajes)."
+        ),
+    )
 
 
 class FeedbackRequest(BaseModel):
