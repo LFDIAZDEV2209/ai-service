@@ -15,13 +15,16 @@ from langgraph.checkpoint.memory import MemorySaver
 from app.graph.graph import build_graph
 from tests.fakes import FakeToolAwareModel
 
-# Config para tests: la suite es DB-FREE por diseño (rápida y corrible en CI
-# sin infraestructura). Forzamos DATABASE_URL vacía para que el checkpointer
-# use MemorySaver y el lifespan NO corra migraciones: un DATABASE_URL con
-# valor (aunque sea un DSN falso) activa la ruta Postgres y los tests fallan
-# en cualquier entorno sin base de datos (CI). La cobertura con Postgres real
-# vive en los entornos de desarrollo/staging, no en este job de tests.
-os.environ["DATABASE_URL"] = ""
+# Config para tests: DATABASE_URL la consumen el motor SQLAlchemy (se crea a
+# nivel módulo al importar `app.db.engine`) y las sesiones que resuelven los
+# endpoints bajo TestClient. En CI, el workflow levanta un servicio Postgres
+# con ESTAS mismas credenciales (no hay infra implícita); localmente apunta a
+# una DB de test dedicada — nunca a la de desarrollo. `setdefault` no pisa una
+# variable ya definida en el entorno.
+os.environ.setdefault(
+    "DATABASE_URL",
+    "postgresql+psycopg://test:test@localhost:5432/test",
+)
 os.environ.setdefault("ENVIRONMENT", "test")
 
 SIMPLE_ANSWER = "¡Hola! Soy CoppAI. ¿En qué te ayudo?"

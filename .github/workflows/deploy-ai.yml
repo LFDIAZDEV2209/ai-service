@@ -25,6 +25,24 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Mismas credenciales que DATABASE_URL del step de tests (abajo):
+        # el servicio existe para que los tests corran con la ruta Postgres
+        # real (motor a nivel módulo + sesiones bajo TestClient). Auto-migrate
+        # (default true) aplica las migraciones de Alembic al arrancar la app.
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v4
 
