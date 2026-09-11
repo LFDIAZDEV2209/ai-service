@@ -50,6 +50,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Habilitar pgvector en la DB de tests
+        # La imagen del servicio trae la extensión instalada, pero cada DB
+        # nueva debe habilitarla (CREATE EXTENSION) antes de las migraciones.
+        run: psql "postgresql://test:test@localhost:5432/test" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+
       - name: Instalar dependencias de test
         run: |
           pip install --upgrade pip
