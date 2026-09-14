@@ -1,10 +1,11 @@
-"""Tests del historial completo expuesto por GET /threads/{thread_id}/state.
+"""Tests del historial paginado expuesto por GET /threads/{thread_id}/state.
 
-El contrato es aditivo: `messages` lista los turnos visibles (usuario/bot) en
-orden cronológico (más reciente al final) para que la app del paciente pueda
-re-renderizar la conversación tras un re-login. `message_count` sigue
-reportando el total real (incluidos los mensajes internos) y `last_message`
-conserva el comportamiento previo del endpoint.
+La app del paciente pide páginas de mensajes visibles (usuario/bot) desde la
+más reciente hacia atrás: `limit` es el tamaño de página, `before` el cursor
+de mensajes visibles a saltear desde el más nuevo, y la respuesta incluye
+`has_more`/`next_cursor` para encadenar la página anterior. `message_count`
+sigue reportando el total real (incluidos los mensajes internos) y
+`last_message` conserva el comportamiento previo del endpoint.
 """
 
 from __future__ import annotations
@@ -74,10 +75,21 @@ async def _seed(graph, messages: list) -> None:
     await graph.aupdate_state(_config(), {"messages": messages})
 
 
-def _get(client, thread_id: str = THREAD_ID):
+def _get(
+    client,
+    thread_id: str = THREAD_ID,
+    *,
+    limit: int | None = None,
+    before: int | None = None,
+):
+    params: dict[str, object] = {"user_id": USER_ID}
+    if limit is not None:
+        params["limit"] = limit
+    if before is not None:
+        params["before"] = before
     return client.get(
         URL.format(thread_id=thread_id),
-        params={"user_id": USER_ID},
+        params=params,
         headers=HEADERS,
     )
 
@@ -177,17 +189,64 @@ async def test_tool_call_only_ai_messages_excluded(client, graph):
     assert body["message_count"] == 3
 
 
-async def test_caps_to_last_100_but_reports_full_count(client, graph):
+async def test_limit_100_returns_last_100_and_reports_full_count(client, graph):
     total = 120
     await _seed(graph, [HumanMessage(content=f"m{i:03d}") for i in range(total)])
 
-    body = _get(client).json()
-    # El contrato expone como máximo los últimos 100 mensajes visibles.
+    body = _get(client, limit=100).json()
+    # Con limit=100 (tope) se expone como máximo los últimos 100 visibles.
     assert body["message_count"] == total
     assert len(body["messages"]) == 100
     # Se conservan los ÚLTIMOS 100, no los primeros.
     assert body["messages"][0] == {"role": "user", "text": "m020"}
     assert body["messages"][-1] == {"role": "user", "text": "m119"}
+    # Quedan 20 visibles más antiguos: se indica la página anterior.
+    assert body["has_more"] is True
+    assert body["next_cursor"] == 100
+
+
+async def test_default_page_returns_newest_10(client, graph):
+    await _seed(graph, [HumanMessage(content=f"m{i:02d}") for i in range(25)])
+
+    body = _get(client).json()
+    # Sin parámetros: limit=10 desde el extremo más nuevo (m24..m15).
+    assert [m["text"] for m in body["messages"]] == [f"m{i:02d}" for i in range(15, 25)]
+    assert body["message_count"] == 25
+    assert body["has_more"] is True
+    assert body["next_cursor"] == 10
+
+
+async def test_before_pages_backwards_until_last_page(client, graph):
+    await _seed(graph, [HumanMessage(content=f"m{i:02d}") for i in range(25)])
+
+    # Segunda página: before=10 ⇒ visible[5:15] (m05..m14).
+    second = _get(client, before=10).json()
+    assert [m["text"] for m in second["messages"]] == [f"m{i:02d}" for i in range(5, 15)]
+    assert second["message_count"] == 25
+    assert second["has_more"] is True
+    assert second["next_cursor"] == 20
+
+    # Tercera página (última): before=20 ⇒ visible[0:5] (m00..m04).
+    last = _get(client, before=20).json()
+    assert [m["text"] for m in last["messages"]] == [f"m{i:02d}" for i in range(0, 5)]
+    assert last["message_count"] == 25
+    assert last["has_more"] is False
+    assert last["next_cursor"] is None
+
+
+async def test_single_page_covering_all_has_no_more(client, graph):
+    await _seed(graph, [HumanMessage(content=f"m{i:02d}") for i in range(25)])
+
+    # limit mayor que el total visible: toda la historia en una sola página.
+    body = _get(client, limit=30).json()
+    assert len(body["messages"]) == 25
+    assert body["has_more"] is False
+    assert body["next_cursor"] is None
+
+
+def test_limit_above_ceiling_returns_422(client):
+    # El tope duro de página se mantiene: limit=101 es inválido.
+    assert _get(client, limit=101).status_code == 422
 
 
 async def test_empty_thread_returns_empty_messages(client, graph):
@@ -200,6 +259,8 @@ async def test_empty_thread_returns_empty_messages(client, graph):
     assert body["messages"] == []
     assert body["message_count"] == 0
     assert body["last_message"] is None
+    assert body["has_more"] is False
+    assert body["next_cursor"] is None
 
 
 async def test_thread_with_only_hidden_messages_returns_empty_list(client, graph):

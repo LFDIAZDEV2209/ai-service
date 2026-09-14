@@ -128,8 +128,19 @@ class ThreadStateResponse(BaseModel):
     messages: list[ThreadMessageResponse] = Field(
         default_factory=list,
         description=(
-            "Historial visible de la conversación, en orden cronológico "
-            "(más reciente al final; máximo 100 mensajes)."
+            "Página solicitada del historial visible, en orden cronológico "
+            "(más reciente al final; máximo `limit` mensajes, tope 100)."
+        ),
+    )
+    has_more: bool = Field(
+        default=False,
+        description="True cuando existe historial visible más antiguo que esta página.",
+    )
+    next_cursor: int | None = Field(
+        default=None,
+        description=(
+            "Valor a enviar como `before` para pedir la página anterior; "
+            "null cuando `has_more` es false."
         ),
     )
 

@@ -20,10 +20,11 @@ router = APIRouter(
     dependencies=[Depends(require_internal_key)],
 )
 
-# La app del paciente re-renderiza toda la conversación tras un re-login: el
-# historial completo inflaría la respuesta sin aportar contexto útil, así que
-# solo se devuelven los últimos 100 mensajes VISIBLES. El recorte aplica a la
-# lista devuelta; `message_count` sigue reportando el total real del thread.
+# La app del paciente pagina hacia atrás: pide las últimas páginas de mensajes
+# VISIBLES y va subiendo por el historial al hacer scroll. `limit` define el
+# tamaño de página (tope MAX_THREAD_MESSAGES = 100) y `before` es el cursor de
+# cuántos mensajes visibles saltear desde el más nuevo. `message_count` sigue
+# reportando el total real del thread, no el de la página.
 MAX_THREAD_MESSAGES = 100
 
 
@@ -45,11 +46,30 @@ def _visible_role(message: BaseMessage) -> str | None:
 async def thread_state(
     thread_id: str,
     user_id: str = Query(..., min_length=1, description="ID del usuario propietario (backend/JWT)"),
+    limit: int = Query(
+        10,
+        ge=1,
+        le=MAX_THREAD_MESSAGES,
+        description="Cantidad máxima de mensajes visibles por página.",
+    ),
+    before: int | None = Query(
+        None,
+        ge=0,
+        description=(
+            "Cursor de paginación: cuántos mensajes visibles saltear desde el "
+            "más nuevo (null/ausente ⇒ página más reciente)."
+        ),
+    ),
     graph=Depends(get_graph),
 ) -> ThreadStateResponse:
-    """Devuelve un resumen del historial persistido de un thread (solo del
+    """Devuelve una página del historial persistido de un thread (solo del
     usuario autenticado que lo consulta), incluidos los mensajes visibles que
-    la app del paciente necesita para reconstruir la conversación."""
+    la app del paciente necesita para reconstruir la conversación.
+
+    `limit` define el tamaño de la página y `before` el cursor que saltea
+    mensajes visibles desde el más nuevo (null ⇒ página más reciente). La
+    respuesta incluye `has_more` y `next_cursor` para pedir la página anterior.
+    """
     storage_thread_id = f"{user_id}::{thread_id}"
     snapshot = await graph.aget_state({"configurable": {"thread_id": storage_thread_id}})
 
@@ -64,7 +84,7 @@ async def thread_state(
     # Historial visible: se descartan los mensajes internos (tool/system) y
     # los que no aportan texto (p. ej. AIMessage que solo contiene tool_calls),
     # conservando el orden cronológico (más reciente al final).
-    history: list[ThreadMessageResponse] = []
+    visible: list[ThreadMessageResponse] = []
     for message in messages:
         role = _visible_role(message)
         if role is None:
@@ -72,7 +92,7 @@ async def thread_state(
         text = extract_message_text(getattr(message, "content", "") or "")
         if not text.strip():
             continue
-        history.append(ThreadMessageResponse(role=role, text=text))
+        visible.append(ThreadMessageResponse(role=role, text=text))
 
     last_message = None
     if messages:
@@ -82,9 +102,23 @@ async def thread_state(
         # nunca str(lista) que mostraba "[{'text': ...}]" en el chat.
         last_message = extract_message_text(last_content)
 
+    # Paginación hacia atrás: `before` cuenta cuántos mensajes visibles se
+    # saltean desde el más nuevo y `limit` define el tamaño de la página. El
+    # resultado va en orden cronológico y `next_cursor`, cuando hay más
+    # historia, es el `before` que la app debe enviar en la próxima solicitud.
+    total_visible = len(visible)
+    offset = before or 0
+    end = max(0, total_visible - offset)
+    start = max(0, end - limit)
+    page = visible[start:end]
+    has_more = start > 0
+    next_cursor = (total_visible - start) if has_more else None
+
     return ThreadStateResponse(
         thread_id=thread_id,
         message_count=len(messages),
         last_message=last_message,
-        messages=history[-MAX_THREAD_MESSAGES:],
+        messages=page,
+        has_more=has_more,
+        next_cursor=next_cursor,
     )
