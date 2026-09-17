@@ -386,11 +386,17 @@ async def chat_stream(
     )
 
     started = time.perf_counter()
+    flow_trace: list[dict[str, object]] = []
 
     async def event_generator():
         yield "event: start\ndata: {}\n\n"
         final_state: dict | None = None
         error: str | None = None
+        # Trazabilidad de nodos para la visualización de flujos en vivo:
+        # `stream_mode="tasks"` emite inicio (trae `triggers`) y fin (trae
+        # `result`) de cada nodo; se traduce a eventos `flow` con step/ts.
+        flow_step = 0
+        running_tasks: dict[str, dict[str, Any]] = {}
         try:
             config = _build_config(thread_id, request, recursion_limit)
             agent_key = request.agent or request.agent_type_id or "base"
@@ -398,7 +404,7 @@ async def chat_stream(
             async for mode, chunk in graph.astream(
                 {"input": request.message, "agent": agent_key},
                 config=config,
-                stream_mode=["updates", "messages", "values"],
+                stream_mode=["updates", "messages", "values", "tasks"],
             ):
                 if mode == "values":
                     # Estado completo tras cada super-step; el último es el final.
@@ -406,7 +412,7 @@ async def chat_stream(
                         final_state = chunk
                     continue
                 if mode == "messages":
-                    message_chunk, _metadata = chunk
+                    message_chunk, metadata = chunk
                     # Solo transmitir tokens de AIMessage/AIMessageChunk, no HumanMessage
                     if not isinstance(message_chunk, (AIMessage, AIMessageChunk)):
                         continue
@@ -421,15 +427,72 @@ async def chat_stream(
                     else:
                         text = content if isinstance(content, str) else ""
                     if text:
-                        payload = json.dumps(
-                            {"type": "token", "content": text},
-                            ensure_ascii=False,
+                        token_payload: dict[str, object] = {"type": "token", "content": text}
+                        # Nodo que emite el token (el front marca el nodo activo).
+                        node_name = (
+                            metadata.get("langgraph_node")
+                            if isinstance(metadata, dict)
+                            else None
                         )
+                        if node_name:
+                            token_payload["node"] = node_name
+                        payload = json.dumps(token_payload, ensure_ascii=False)
                         yield f"event: message\ndata: {payload}\n\n"
                 elif mode == "updates":
                     for node_name in chunk:
                         payload = json.dumps({"type": "node", "node": node_name})
                         yield f"event: node\ndata: {payload}\n\n"
+                elif mode == "tasks":
+                    if not isinstance(chunk, dict):
+                        continue
+                    node_name = str(chunk.get("name") or "")
+                    task_id = str(chunk.get("id") or "")
+                    # Tasks internos de LangGraph (`__start__`, etc.) fuera.
+                    if not node_name or not task_id or node_name.startswith("__"):
+                        continue
+                    now_ms = int(time.time() * 1000)
+                    if "triggers" in chunk:
+                        flow_step += 1
+                        running_tasks[task_id] = {
+                            "node": node_name,
+                            "started_pc": time.perf_counter(),
+                            "step": flow_step,
+                            "ts": now_ms,
+                        }
+                        flow_trace.append(
+                            {
+                                "node": node_name,
+                                "phase": "start",
+                                "step": flow_step,
+                                "ts": now_ms,
+                            }
+                        )
+                        payload = json.dumps(
+                            {
+                                "type": "flow",
+                                "node": node_name,
+                                "phase": "start",
+                                "step": flow_step,
+                                "ts": now_ms,
+                            },
+                            ensure_ascii=False,
+                        )
+                        yield f"event: flow\ndata: {payload}\n\n"
+                    else:
+                        info = running_tasks.pop(task_id, None)
+                        entry: dict[str, object] = {
+                            "node": node_name,
+                            "phase": "end",
+                            "step": info["step"] if info else flow_step,
+                            "ts": now_ms,
+                        }
+                        if info is not None:
+                            entry["duration_ms"] = int(
+                                (time.perf_counter() - float(info["started_pc"])) * 1000
+                            )
+                        flow_trace.append(entry)
+                        payload = json.dumps({"type": "flow", **entry}, ensure_ascii=False)
+                        yield f"event: flow\ndata: {payload}\n\n"
         except Exception as exc:
             logger.exception("Error en el stream del agente")
             error = str(exc)
@@ -445,6 +508,7 @@ async def chat_stream(
                     result_state=final_state,
                     model=model,
                     latency_ms=latency_ms,
+                    flow_trace=flow_trace or None,
                 )
             else:
                 # Sin estado final (stream interrumpido): se registra como error

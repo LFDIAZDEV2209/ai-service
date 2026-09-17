@@ -145,8 +145,13 @@ class ExecutionTracker:
         result_state: dict,
         model: str | None,
         latency_ms: int,
+        flow_trace: list[dict] | None = None,
     ) -> None:
-        """Completa la ejecución con métricas del estado final del grafo."""
+        """Completa la ejecución con métricas del estado final del grafo.
+
+        `flow_trace` (opcional): traza de nodos del stream (start/end con
+        duración) para reproducir el flujo en la UI de visualización.
+        """
         messages = list(result_state.get("messages", []))
         tokens_in, tokens_out = _usage_stats(messages, model or "unknown")
         answer = ""
@@ -161,7 +166,7 @@ class ExecutionTracker:
         if execution is None:
             return
         execution.status = _STATUS_OK
-        execution.output = {
+        output: dict = {
             "answer": answer or None,
             "tools_used": result_state.get("tools_used", []),
             "rag_sources": extract_rag_sources(messages),
@@ -169,6 +174,9 @@ class ExecutionTracker:
             "provider": result_state.get("provider") or model,
             "model": model or result_state.get("provider"),
         }
+        if flow_trace:
+            output["flow_trace"] = flow_trace
+        execution.output = output
         execution.tokens_in = tokens_in
         execution.tokens_out = tokens_out
         execution.latency_ms = latency_ms

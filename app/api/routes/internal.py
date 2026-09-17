@@ -5,10 +5,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import Base64Bytes, BaseModel, Field
+from pydantic import Base64Bytes, BaseModel, Field, ValidationError
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.graph_descriptor import build_graph_descriptor
+from app.agents.runtime_config import AgentRuntimeConfig as AgentRuntimeConfigSchema
 from app.agents.runtime_registry import registry as runtime_registry
 from app.api.deps import get_db_session
 from app.api.security import require_internal_key
@@ -16,6 +18,7 @@ from app.db.models import AgentRuntimeConfig
 from app.rag.extract import DocumentExtractionError
 from app.rag.ingest import DocumentIngestResult, ingest_document_bytes
 from app.rag.pgvector_store import PgVectorStore
+from app.schemas.agent_graph import AgentGraphResponse
 from app.schemas.plan_generation import PlanGenerationRequest, PlanGenerationResponse
 from app.services.plan_generation import (
     PlanGenerationService,
@@ -122,6 +125,45 @@ async def sync_agent_config(
     return AgentConfigSyncResponse(
         agent_type_id=payload.agent_type_id,
         version_id=payload.version_id,
+    )
+
+
+@router.get("/agents/{agent_type_id}/graph", response_model=AgentGraphResponse)
+async def get_agent_graph(
+    agent_type_id: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> AgentGraphResponse:
+    """Descriptor del grafo del agente (nodos/aristas + config efectiva).
+
+    Se construye desde `ai.agent_runtime_configs`; si el agente no está
+    sincronizado (o su configuración es inválida) se devuelve el descriptor
+    del grafo base para que la UI siempre tenga un flujo que dibujar.
+    """
+    row = (
+        await session.execute(
+            select(AgentRuntimeConfig).where(
+                AgentRuntimeConfig.agent_type_id == agent_type_id,
+                AgentRuntimeConfig.is_active.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+
+    if row is None:
+        return build_graph_descriptor(agent_type_id=agent_type_id)
+
+    try:
+        config = AgentRuntimeConfigSchema.model_validate(row.config)
+    except ValidationError:
+        logger.warning(
+            "Config inválida en runtime para agente %s; se devuelve descriptor base",
+            agent_type_id,
+        )
+        return build_graph_descriptor(agent_type_id=agent_type_id)
+
+    return build_graph_descriptor(
+        agent_type_id=agent_type_id,
+        version_id=row.version_id,
+        config=config,
     )
 
 

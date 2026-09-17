@@ -63,7 +63,7 @@ Subgraphs under `app/graph/subgraphs/` — specialized agents with isolated stat
 - **Config via pydantic-settings**: `app/core/config.py` reads from `.env`
 - **Multi-provider LLM**: Anthropic Claude / OpenAI via factory pattern
 - **Checkpointer**: MemorySaver (dev) → **AsyncPostgresSaver** (prod, schema `ai`). `get_checkpointer()` es ASYNC (AsyncConnectionPool necesita loop abierto); resolverlo en `get_graph()` (deps) o en `AgentRuntimeRegistry` (inyecta `checkpointer_factory=MemorySaver` en tests). NUNCA llamarlo síncrono. `build_graph()` exige checkpointer explícito.
-- **Streaming SSE**: tokens + nodes en vivo via `/chat/stream` (stream_mode `["updates","messages","values"]`)
+- **Streaming SSE**: tokens + nodes en vivo via `/chat/stream` (stream_mode `["updates","messages","values","tasks"]`) — `tasks` añade eventos `flow` por nodo (`{"type":"flow","node","phase":"start|end","step","ts","duration_ms"}`) para la visualización de flujos del ERP; la traza queda en `output.flow_trace` de la ejecución
 - **RAG**: chunker propio + embeddings + vector store (pgvector en prod); retriever con filtro por `knowledge_base_ids` (aislamiento entre agentes)
 - **Memoria usuario** (fase 5): `app/memory/` — `extract.py` (hechos heurísticos), `postgres.py` (UserMemoryStore, aislado por user_id), `service.py` (contexto + resumen rodante). Ver `docs/memory.md`
 - **Adaptive memory** (fase 6): `app/memory/adaptive.py` — feedback → experiencias (upsert por trigger), evaluación heurística; inyecta `experience_context` separado de la memoria del usuario. Ver `docs/adaptive-memory.md`
@@ -104,6 +104,7 @@ Endpoints internos (backend → AI Service, header `X-Internal-Key`, sin prefix)
 
 ```
 POST /internal/agents/sync-config      # activar versión → invalida cache del registry
+GET  /internal/agents/{id}/graph       # descriptor del grafo (nodos/aristas + config efectiva)
 POST /internal/agents/ingest           # indexar documento (blob base64) → pgvector
 DELETE /internal/agents/ingest/{id}    # eliminar chunks de un documento
 ```
