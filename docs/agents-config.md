@@ -102,10 +102,21 @@ hará desde el backend (.NET) vía los endpoints internos (ver abajo).
 POST   /internal/agents/sync-config      # upsert de la versión activa de un agente
 POST   /internal/agents/ingest           # indexar documento → pgvector (RAG)
 DELETE /internal/agents/ingest/{id}      # eliminar chunks de un documento
+GET    /internal/agents/{id}/graph       # descriptor del grafo (playground ERP)
 ```
 
 El backend (.NET) es la fuente de verdad del **catálogo**; el AI Service
 cachea la config activa para compilar grafos sin round-trips.
+
+### Descriptor del grafo (`GET /internal/agents/{id}/graph`)
+
+`app/agents/graph_descriptor.py` traduce la config activa a nodos + aristas
+que el playground del ERP dibuja. Cada nodo trae `meta` con su detalle de
+configuración (para el drawer de nodo): `agent` expone
+`provider/model/temperature/max_tokens/max_tool_calls/recursion_limit`,
+`rag_enabled/knowledge_base_count/top_k` y `memory_enabled`; `tools` lista
+`tools` + `max_tool_calls`; los nodos de memoria llevan `categories`. Sin
+config sincronizada responde el grafo `base` (todas las tools, sin memoria).
 
 ## Poblar la BD (seed)
 

@@ -60,14 +60,14 @@ NODE_CATALOG: dict[str, tuple[str, str, str]] = {
 RAG_TOOL_NAME = "retrieve_knowledge"
 
 
-def _node(node_id: str, **meta: Any) -> AgentGraphNode:
+def _node(node_id: str, meta: dict[str, Any] | None = None) -> AgentGraphNode:
     label, kind, description = NODE_CATALOG[node_id]
     return AgentGraphNode(
         id=node_id,
         label=label,
         kind=kind,  # type: ignore[arg-type]
         description=description,
-        meta=meta,
+        meta=meta or {},
     )
 
 
@@ -102,16 +102,40 @@ def build_graph_descriptor(
     effective = config or AgentRuntimeConfig()
     memory_enabled = effective.memory_config.enabled
     tool_names = effective_tool_names(effective)
+    retrieval = effective.retrieval_config
+    rag_enabled = retrieval.enabled and bool(retrieval.knowledge_base_ids)
+    memory_categories = list(effective.memory_config.categories)
+
+    # Meta por nodo (snake_case): detalle que muestra el drawer del playground.
+    llm_meta: dict[str, Any] = {}
+    if effective.provider:
+        llm_meta["provider"] = effective.provider
+    if effective.model:
+        llm_meta["model"] = effective.model
+    if effective.temperature is not None:
+        llm_meta["temperature"] = effective.temperature
+    if effective.max_tokens is not None:
+        llm_meta["max_tokens"] = effective.max_tokens
+    llm_meta["max_tool_calls"] = effective.max_tool_calls
+    llm_meta["recursion_limit"] = effective.recursion_limit
+    if rag_enabled:
+        llm_meta["rag_enabled"] = True
+        llm_meta["knowledge_base_count"] = len(retrieval.knowledge_base_ids)
+        llm_meta["top_k"] = retrieval.top_k
+    if memory_enabled:
+        llm_meta["memory_enabled"] = True
+    tools_meta: dict[str, Any] = {"tools": tool_names, "max_tool_calls": effective.max_tool_calls}
+    memory_meta: dict[str, Any] = {"categories": memory_categories} if memory_enabled else {}
 
     nodes: list[AgentGraphNode] = [_node("start"), _node("guardrails")]
     if memory_enabled:
-        nodes.append(_node("memory_load"))
-        nodes.append(_node("experience_load"))
-    nodes.append(_node("agent"))
+        nodes.append(_node("memory_load", memory_meta))
+        nodes.append(_node("experience_load", memory_meta))
+    nodes.append(_node("agent", llm_meta))
     if tool_names:
-        nodes.append(_node("tools", tools=tool_names))
+        nodes.append(_node("tools", tools_meta))
     if memory_enabled:
-        nodes.append(_node("memory_save"))
+        nodes.append(_node("memory_save", memory_meta))
     nodes.append(_node("end"))
 
     edges: list[AgentGraphEdge] = [
@@ -154,8 +178,6 @@ def build_graph_descriptor(
     if memory_enabled:
         edges.append(AgentGraphEdge(source="memory_save", target="end"))
 
-    retrieval = effective.retrieval_config
-    rag_enabled = retrieval.enabled and bool(retrieval.knowledge_base_ids)
     graph_config = AgentGraphConfig(
         provider=effective.provider,
         model=effective.model,
@@ -169,7 +191,7 @@ def build_graph_descriptor(
         ),
         memory=AgentGraphMemoryConfig(
             enabled=memory_enabled,
-            categories=list(effective.memory_config.categories),
+            categories=memory_categories,
         ),
         max_tool_calls=effective.max_tool_calls,
         recursion_limit=effective.recursion_limit,

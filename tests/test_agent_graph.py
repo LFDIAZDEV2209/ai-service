@@ -104,6 +104,51 @@ def test_descriptor_runtime_con_memoria_rag_y_tools():
     assert ("tools", "agent") in edges
 
 
+def test_descriptor_meta_por_nodo_para_drawer_playground():
+    """El meta por nodo expone el detalle de configuración (drawer del playground)."""
+    config = AgentRuntimeConfig(
+        provider="anthropic",
+        model="claude-sonnet-4",
+        temperature=0.3,
+        max_tokens=2048,
+        tools=["calculate"],
+        retrieval_config=RetrievalConfig(
+            enabled=True, knowledge_base_ids=["kb-1", "kb-2"], top_k=4
+        ),
+        memory_config=MemoryConfig(enabled=True, categories=["clinico", "preferencias"]),
+        max_tool_calls=5,
+        recursion_limit=18,
+    )
+    graph = build_graph_descriptor(
+        agent_type_id="agente-4", version_id="v-1", config=config
+    )
+
+    by_id = {node.id: node for node in graph.nodes}
+    agent_meta = by_id["agent"].meta
+    assert agent_meta["provider"] == "anthropic"
+    assert agent_meta["model"] == "claude-sonnet-4"
+    assert agent_meta["temperature"] == 0.3
+    assert agent_meta["max_tokens"] == 2048
+    assert agent_meta["max_tool_calls"] == 5
+    assert agent_meta["recursion_limit"] == 18
+    assert agent_meta["rag_enabled"] is True
+    assert agent_meta["knowledge_base_count"] == 2
+    assert agent_meta["top_k"] == 4
+    assert agent_meta["memory_enabled"] is True
+
+    tools_meta = by_id["tools"].meta
+    assert tools_meta["tools"] == ["calculate", "retrieve_knowledge"]
+    assert tools_meta["max_tool_calls"] == 5
+
+    for node_id in ("memory_load", "experience_load", "memory_save"):
+        assert by_id[node_id].meta["categories"] == ["clinico", "preferencias"]
+
+    # Nodos fijos sin meta.
+    assert by_id["start"].meta == {}
+    assert by_id["end"].meta == {}
+    assert by_id["guardrails"].meta == {}
+
+
 def test_descriptor_retrieval_habilitado_sin_kbs_no_agrega_tool_rag():
     """`enabled` sin KBs explícitas no agrega la tool (aislamiento entre agentes)."""
     config = AgentRuntimeConfig(
