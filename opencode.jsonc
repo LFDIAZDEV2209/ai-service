@@ -7,52 +7,44 @@
     "../LEARNINGS.md",
     "../.agents/rules/*.md",
   ],
-  "skills": {
-    "paths": ["./.agents/skills", "../.agents/skills"],
-  },
-  "permission": {
-    "skill": {
-      "*": "allow",
-    },
-    "bash": {
-      "uv sync*": "allow",
-      "uv run pytest*": "allow",
-      "uv run ruff*": "allow",
-      "uv run python run_dev.py*": "allow",
-      "uv run alembic*": "allow",
-    },
-    "lsp": "allow",
-  },
-  "agent": {
+  "skills": ["./.agents/skills", "../.agents/skills"],
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    { "action": "shell", "resource": "uv sync*", "effect": "allow" },
+    { "action": "shell", "resource": "uv run pytest*", "effect": "allow" },
+    { "action": "shell", "resource": "uv run ruff*", "effect": "allow" },
+    { "action": "shell", "resource": "uv run python run_dev.py*", "effect": "allow" },
+    { "action": "shell", "resource": "uv run alembic*", "effect": "allow" },
+  ],
+  "agents": {
     "coppaddresd": {
       "description": "Agente principal ai-service: LangGraph + FastAPI, skills-first",
       "mode": "primary",
-      "prompt": "Eres el agente principal del ai-service (Python 3.11+, LangGraph, FastAPI, uv, puerto 8000). Aplica .agents/rules/*.md: carga fastapi-python + pydantic (+ python-testing-patterns / machine-learning según toque) con skill() ANTES de codificar; dev solo con uv run python run_dev.py (nunca uvicorn directo); checkpointer async solo vía get_graph/deps; memory_save commitea; respeta schema ai. + Alembic; verifica con uv run ruff check . + pytest enfocado. Responde en el idioma del usuario; docs en español.",
-      "permission": {
-        "skill": {
-          "*": "allow",
-        },
-      },
+      "system": "Eres el agente principal del ai-service (Python 3.11+, LangGraph, FastAPI, uv, puerto 8000). Aplica .agents/rules/*.md: carga fastapi-python + pydantic (+ python-testing-patterns / machine-learning según toque) con skill() ANTES de codificar; dev solo con uv run python run_dev.py (nunca uvicorn directo); checkpointer async solo vía get_graph/deps; memory_save commitea; respeta schema ai. + Alembic; verifica con uv run ruff check . + pytest enfocado. Responde en el idioma del usuario; docs en español.",
+      "permissions": [
+        { "action": "skill", "resource": "*", "effect": "allow" },
+      ],
     },
     "design-expert": {
       "description": "Diseñador UX/UI senior para piezas visibles (docs, playground, monitoreo)",
       "mode": "subagent",
-      "prompt": "Diseñador UX/UI senior. Carga design-taste-frontend + impeccable antes de codificar. Bans anti-slop, WCAG 2.2 AA, estados loading/empty/error.",
+      "system": "Diseñador UX/UI senior. Carga design-taste-frontend + impeccable antes de codificar. Bans anti-slop, WCAG 2.2 AA, estados loading/empty/error.",
     },
     "reviewer": {
       "description": "Revisor Python/FastAPI sin editar",
       "mode": "subagent",
-      "prompt": "Revisor Python senior. Analiza sin editar: async correcto, checkpointer/commit de memoria, aislamiento RAG por agente, contratos snake_case, tests sin API keys. Cita archivo:línea.",
-      "permission": {
-        "edit": "deny",
-      },
+      "system": "Revisor Python senior. Analiza sin editar: async correcto, checkpointer/commit de memoria, aislamiento RAG por agente, contratos snake_case, tests sin API keys. Cita archivo:línea.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
     },
   },
-  "subagent_depth": 2,
+  "experimental": {
+    "subagent_depth": 2,
+  },
   "compaction": {
     "auto": true,
-    "prune": true,
-    "reserved": 15000,
+    "buffer": 15000,
   },
   "lsp": {
     "pyright": {
@@ -61,10 +53,11 @@
     },
   },
   "mcp": {
-    "codegraph": {
-      "type": "local",
-      "command": ["codegraph", "serve", "--mcp"],
-      "enabled": true,
+    "servers": {
+      "codegraph": {
+        "type": "local",
+        "command": ["codegraph", "serve", "--mcp"],
+      },
     },
   },
   "formatter": {
