@@ -31,6 +31,24 @@ antes de acciones sensibles, no diagnóstico/prescripción, no PHI de terceros,
 respuestas cortas habladas, manejo de silencios, derivación a humano, y
 emergencias → botón SOS de la app.
 
+### Idioma (fix de comportamiento, 2026-09-29)
+
+Síntomas reportados: el agente a veces cambiaba a inglés a mitad de la
+conversación, se trababa o decía frases sin sentido. Correcciones aplicadas:
+
+- **Regla de espejo estricto** en el system prompt: responde en el idioma del
+  paciente (es→es, en→en, mezcla→idioma del último turno); jamás cambiar de
+  idioma a mitad de frase o entre turnos sin que el paciente lo haga.
+- **`language_detection` (built-in system tool) activado** con cambio dinámico
+  (`only_at_conversation_start=false`).
+- **LLM cambiado de `qwen35-397b-a17b` (default del workspace, inestable) a
+  `gemini-2.5-flash`** + `temperature 0.4` — estabilidad de discurso y menor
+  babbling; regla anti-babbling ("si te pierdes, párralo y pregunta").
+- Versión del agente con `version_description` del fix.
+- **Agente de texto (CoppAI)**: regla 1 del prompt base reforzada en
+  `ai-service/app/agents/prompts.py` y en el espejo del seeder backend
+  (`AgentCatalogSeeder.cs`) — mismo contrato de idioma es/en.
+
 ## Client tools registradas (FASE 7)
 
 Todas de tipo **client**: ElevenLabs no llama a ningún endpoint; la app ejecuta

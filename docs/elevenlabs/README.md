@@ -19,6 +19,8 @@ app de pacientes `antares-paciente`, siguiendo el plan de
 | `08-testing.md`              | Suites automatizadas y prueba manual por device                                                       |
 | `09-troubleshooting.md`      | Errores típicos y soluciones                                                                          |
 | `agent-config.md`            | Config real del agente creado vía MCP (id, tools, prompt)                                             |
+| `attachments.md`             | Attachments del chat: imágenes (soportado) y diseño de video/PDF/archivos                             |
+| `ios-testflight.md`          | Checklist de release iOS/TestFlight (permisos, build, verificaciones)                                 |
 
 ## Arquitectura en una línea
 
@@ -44,5 +46,7 @@ cliente. Cambiar de cuenta ElevenLabs = cambiar 3 variables de entorno.
 - ✅ App: `VoiceOverlay` con SDK oficial + client tools + fallback Web Speech,
   i18n, lint/build/tests verdes.
 - ✅ E2E verificado en local (signed URL real devuelto al cliente).
+- ✅ Rediseño UX (ChatGPT-like) de ChatPage + VoiceOverlay por agente de
+  diseño en Herdr (Split Right), revisado e integrado por el principal.
 - ⏳ Despliegue prod (patch único de Secrets Manager + task def, ver 07) y
   prueba en TestFlight.
