@@ -1,5 +1,7 @@
 # AI Service — Agent Guide
 
+> **Contexto compartido del workspace**: lee `../.coppadresd-context/` (estado actual, arquitectura, decisiones, ítems abiertos, runbook) ANTES de modificar código. Última verificación: 2026-09-30. Aquí vive la integración ElevenLabs (`/internal/voice/session`).
+
 Python 3.11+, LangGraph, FastAPI. Agente de IA escalable para CoppAddresd.
 
 ## Commands
@@ -18,7 +20,7 @@ uv run ruff format .                             # format
 > ProactorEventLoop (incompatible con psycopg async). `run_dev.py` pasa
 > `loop="asyncio:SelectorEventLoop"`. Si el puerto 8000 lo ocupa un proceso
 > viejo levantado sin run_dev.py, matarlo antes (`Get-NetTCPConnection
-> -LocalPort 8000`).
+-LocalPort 8000`).
 
 ## Architecture
 
@@ -113,12 +115,12 @@ DELETE /internal/agents/ingest/{id}    # eliminar chunks de un documento
 
 Load relevant skills from `.agents/skills/` before writing code:
 
-| Tipo de trabajo | Skills a cargar |
-|---|---|
+| Tipo de trabajo   | Skills a cargar                                   |
+| ----------------- | ------------------------------------------------- |
 | FastAPI endpoints | `fastapi-python` + `pydantic` + `python-executor` |
-| Tests | `python-testing-patterns` + `testing` |
-| RAG/embeddings | `machine-learning` + `pandas-data-analysis` |
-| Templates | `fastapi-templates` |
+| Tests             | `python-testing-patterns` + `testing`             |
+| RAG/embeddings    | `machine-learning` + `pandas-data-analysis`       |
+| Templates         | `fastapi-templates`                               |
 
 ## CodeGraph
 
