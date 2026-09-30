@@ -94,6 +94,21 @@ class Settings(BaseSettings):
     docs_path: str = "./docs"
     rag_top_k: int = 5
 
+    # ── ElevenLabs (voz conversacional) ────────────────────
+    # Sesiones de voz para la app de pacientes. La API key vive SOLO en este
+    # servicio (.env git-ignored / Secrets Manager en prod): nunca llega al
+    # frontend ni se loguea. Cambiar de cuenta ElevenLabs = cambiar la key (y
+    # el agent_id si el agente vive en otra cuenta).
+    elevenlabs_api_key: str | None = None
+    elevenlabs_agent_id: str | None = None
+    # Residencia de datos: workspace global → https://api.elevenlabs.io;
+    # workspace US → https://api.us.elevenlabs.io (el signed URL debe emitirse
+    # contra la misma región que el agente, si no el OAuth/WS falla).
+    elevenlabs_base_url: str = "https://api.elevenlabs.io"
+    voice_enabled: bool = False
+    # Timeout de la llamada a ElevenLabs al emitir una sesión (signed URL).
+    elevenlabs_timeout: float = 10.0
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_cors_origins(cls, v):
@@ -128,6 +143,13 @@ class Settings(BaseSettings):
             missing.append("ANTHROPIC_API_KEY (componente: app.llm.factory — modelo de chat)")
         if provider == "openai" and not self.openai_api_key:
             missing.append("OPENAI_API_KEY (componente: app.llm.factory — modelo de chat)")
+        if self.voice_enabled:
+            if not self.elevenlabs_api_key:
+                missing.append(
+                    "ELEVENLABS_API_KEY (componente: app.voice.client — sesiones de voz)"
+                )
+            if not self.elevenlabs_agent_id:
+                missing.append("ELEVENLABS_AGENT_ID (componente: app.voice.client — agente de voz)")
 
         if missing:
             raise ConfigError(

@@ -17,6 +17,7 @@ from app.api.routes import (
     lab_exam,
     proactive,
     threads,
+    voice,
 )
 from app.core.config import get_settings
 from app.core.logging import setup_logging
@@ -74,5 +75,6 @@ def create_app() -> FastAPI:
     app.include_router(internal.router)
     app.include_router(proactive.router)
     app.include_router(lab_exam.router)
+    app.include_router(voice.router)
 
     return app
