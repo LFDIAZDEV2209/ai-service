@@ -21,22 +21,23 @@ El objetivo es integrar **ElevenLabs Conversational AI** como el motor de voz in
 
 Para determinar dónde reside la orquestación de ElevenLabs, se evaluaron tres opciones estructurales:
 
-| Dimensión de Análisis | Opción A: Integrar en Backend .NET (`coppAddresdBack`) | Opción B: Extender `ai-service` Existente (Elegida) | Opción C: Crear un Nuevo Microservicio "Voice AI" |
-| :--- | :--- | :--- | :--- |
-| **Latencia de Inicio de Sesión** | Muy baja (~200 ms). Comunicación directa .NET → ElevenLabs REST. | Baja (~230 ms). Salto interno adicional en la red local/VPC (.NET → `ai-service` :8000). Imperceptible. | Media-Baja (~240 ms). Salto adicional hacia un nuevo servicio contenedorizado. |
-| **Latencia de Conversación (Turn-Taking)** | Idéntica. El audio viaja directo Paciente ⇄ ElevenLabs vía WebRTC. | Idéntica. El audio viaja directo Paciente ⇄ ElevenLabs vía WebRTC. | Idéntica. El audio viaja directo Paciente ⇄ ElevenLabs vía WebRTC. |
-| **Seguridad y Gestión de Secretos** | Dispersa la `ELEVENLABS_API_KEY` dentro del monolito .NET, mezclando secretos de IA con reglas de negocio tradicionales. | **Excelente.** Centraliza todas las API keys de proveedores de IA (OpenAI, Anthropic, ElevenLabs) en un único componente cerrado (`ai-service`). | Buena, pero añade una nueva superficie de infraestructura y nuevos endpoints de gestión. |
-| **Coste de Infraestructura** | Coste cero incremental (reutiliza los pods ECS actuales de la API). | **Coste cero incremental.** Reutiliza el contenedor ECS existente de `ai-service` que ya corre FastAPI. | **Alto coste innecesario.** Requiere nueva tarea ECS en AWS, Application Load Balancer, logs y pipelines CI/CD. |
-| **Observabilidad y Tracing** | Requiere portar trazabilidad de llamadas de IA a C#. | **Óptima.** `ai-service` ya cuenta con `ExecutionTracker`, logging estructurado de agentes y correlation IDs compartidos. | Fragmentada en un tercer repositorio o componente. |
-| **Mantenibilidad y Clean Architecture** | Viola el principio de responsabilidad única de la API al mezclar SDKs de audio con el dominio clínico. | **Muy alta.** Respeta el rol de `ai-service` como el cerebro de IA de la plataforma, añadiendo un módulo `app/voice/`. | Aumenta la complejidad operativa del clúster innecesariamente. |
-| **Reutilización de Servicios de Negocio** | Directa (en proceso). | **Limpia.** Las tools se ejecutan con el JWT del paciente vía Gateway, reutilizando la API existente sin acoplamiento. | Exige duplicar clientes HTTP o exponer endpoints internos. |
+| Dimensión de Análisis                      | Opción A: Integrar en Backend .NET (`coppAddresdBack`)                                                                   | Opción B: Extender `ai-service` Existente (Elegida)                                                                                              | Opción C: Crear un Nuevo Microservicio "Voice AI"                                                               |
+| :----------------------------------------- | :----------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------- |
+| **Latencia de Inicio de Sesión**           | Muy baja (~200 ms). Comunicación directa .NET → ElevenLabs REST.                                                         | Baja (~230 ms). Salto interno adicional en la red local/VPC (.NET → `ai-service` :8000). Imperceptible.                                          | Media-Baja (~240 ms). Salto adicional hacia un nuevo servicio contenedorizado.                                  |
+| **Latencia de Conversación (Turn-Taking)** | Idéntica. El audio viaja directo Paciente ⇄ ElevenLabs vía WebRTC.                                                       | Idéntica. El audio viaja directo Paciente ⇄ ElevenLabs vía WebRTC.                                                                               | Idéntica. El audio viaja directo Paciente ⇄ ElevenLabs vía WebRTC.                                              |
+| **Seguridad y Gestión de Secretos**        | Dispersa la `ELEVENLABS_API_KEY` dentro del monolito .NET, mezclando secretos de IA con reglas de negocio tradicionales. | **Excelente.** Centraliza todas las API keys de proveedores de IA (OpenAI, Anthropic, ElevenLabs) en un único componente cerrado (`ai-service`). | Buena, pero añade una nueva superficie de infraestructura y nuevos endpoints de gestión.                        |
+| **Coste de Infraestructura**               | Coste cero incremental (reutiliza los pods ECS actuales de la API).                                                      | **Coste cero incremental.** Reutiliza el contenedor ECS existente de `ai-service` que ya corre FastAPI.                                          | **Alto coste innecesario.** Requiere nueva tarea ECS en AWS, Application Load Balancer, logs y pipelines CI/CD. |
+| **Observabilidad y Tracing**               | Requiere portar trazabilidad de llamadas de IA a C#.                                                                     | **Óptima.** `ai-service` ya cuenta con `ExecutionTracker`, logging estructurado de agentes y correlation IDs compartidos.                        | Fragmentada en un tercer repositorio o componente.                                                              |
+| **Mantenibilidad y Clean Architecture**    | Viola el principio de responsabilidad única de la API al mezclar SDKs de audio con el dominio clínico.                   | **Muy alta.** Respeta el rol de `ai-service` como el cerebro de IA de la plataforma, añadiendo un módulo `app/voice/`.                           | Aumenta la complejidad operativa del clúster innecesariamente.                                                  |
+| **Reutilización de Servicios de Negocio**  | Directa (en proceso).                                                                                                    | **Limpia.** Las tools se ejecutan con el JWT del paciente vía Gateway, reutilizando la API existente sin acoplamiento.                           | Exige duplicar clientes HTTP o exponer endpoints internos.                                                      |
 
 ### Veredicto Técnico: **Opción B — Extender `ai-service` existente**
 
 > [!IMPORTANT]
 > **Justificación de la Elección:**  
 > La **Opción B** es la solución arquitectónicamente más limpia, económica y coherente con el workspace:
-> 1. Cumple la directriz mandatoria del proyecto: *"NO crees un microservicio adicional innecesariamente"*. La Opción C queda rotundamente descartada por sobreingeniería y coste operativo redundante.
+>
+> 1. Cumple la directriz mandatoria del proyecto: _"NO crees un microservicio adicional innecesariamente"_. La Opción C queda rotundamente descartada por sobreingeniería y coste operativo redundante.
 > 2. `ai-service` ya es el componente oficial de orquestación de inteligencia artificial en CoppAdresd (aloja LangGraph, checkpointer, prompts y adaptadores de LLM). Concentrar la `ELEVENLABS_API_KEY` en su configuración pydantic previene la proliferación desordenada de secretos de IA en el backend principal.
 > 3. El backend principal `CoppAddresd.Api` actúa como el **guardián perimetral de identidad y negocio**: valida el JWT del paciente (`aud=app`), aplica rate-limiting y auditoría, y delega a `ai-service` mediante el canal interno autenticado con `X-Internal-Key`.
 
@@ -97,7 +98,7 @@ sequenceDiagram
 3. **Generación de Signed URL (`ai-service` → ElevenLabs REST API):**
    - `ai-service` invoca el endpoint oficial de ElevenAgents:
      ```http
-     GET https://api.us.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=agent_4501m3qqzq0ne7qtpcf3p2wkec1a
+     GET https://api.us.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=agent_5501m3w6n1j7fe5tx02291nkvy8n
      Headers:
        xi-api-key: <ELEVENLABS_API_KEY>
      ```
@@ -127,6 +128,7 @@ Se definen **6 tools de negocio específicas** alineadas con las capacidades rea
 ```
 
 ### 4.1 `get_patient_upcoming_appointments`
+
 - **Propósito:** Permite al paciente consultar por voz sus citas médicas programadas y pendientes.
 - **Parámetros de Entrada:** Ninguno. (Se previene IDOR; el paciente se deriva del token de sesión).
 - **Servicio Backend Reutilizado:** `CoppAddresd.Telemedicine.Application.Features.Telemedicine.GetMyAppointmentsQuery`.
@@ -149,6 +151,7 @@ Se definen **6 tools de negocio específicas** alineadas con las capacidades rea
   ```
 
 ### 4.2 `get_available_slots`
+
 - **Propósito:** Consultar turnos disponibles para una fecha determinada, opcionalmente filtrados por especialidad o profesional.
 - **Parámetros de Entrada:**
   - `date` (string, obligatorio): Fecha en formato `YYYY-MM-DD`.
@@ -166,6 +169,7 @@ Se definen **6 tools de negocio específicas** alineadas con las capacidades rea
   ```
 
 ### 4.3 `request_appointment`
+
 - **Propósito:** Registrar una solicitud formal de cita asistencial cuando el paciente elige un horario.
 - **Parámetros de Entrada:**
   - `specialty_id` (string, obligatorio): UUID de la especialidad médica.
@@ -174,9 +178,10 @@ Se definen **6 tools de negocio específicas** alineadas con las capacidades rea
   - `professional_id` (string, opcional): UUID del médico preferido.
 - **Servicio Backend Reutilizado:** `CoppAddresd.Telemedicine.Application.Features.Telemedicine.CreateTelemedicineRequestCommand`.
 - **Endpoint Subyacente:** `POST /api/v1/telemedicine/requests`.
-- **Regla de Agente:** El agente debe pedir confirmación verbal explícita antes de invocar esta tool: *"¿Confirmas que deseas solicitar la cita con Medicina General para el 6 de octubre a las 9:00 AM?"*.
+- **Regla de Agente:** El agente debe pedir confirmación verbal explícita antes de invocar esta tool: _"¿Confirmas que deseas solicitar la cita con Medicina General para el 6 de octubre a las 9:00 AM?"_.
 
 ### 4.4 `reschedule_appointment`
+
 - **Propósito:** Mover una cita existente a una nueva fecha y hora disponible.
 - **Parámetros de Entrada:**
   - `appointment_id` (string, obligatorio): UUID de la cita a reprogramar.
@@ -187,6 +192,7 @@ Se definen **6 tools de negocio específicas** alineadas con las capacidades rea
 - **Control de Concurrencia:** Respaldado por el índice de exclusión GiST de PostgreSQL (`tstzrange`) para evitar colisiones simultáneas.
 
 ### 4.5 `cancel_appointment`
+
 - **Propósito:** Cancelar una cita médica previamente programada.
 - **Parámetros de Entrada:**
   - `appointment_id` (string, obligatorio): UUID de la cita a cancelar.
@@ -196,6 +202,7 @@ Se definen **6 tools de negocio específicas** alineadas con las capacidades rea
 - **Regla de Agente:** Confirmación obligatoria. Si el paciente confirma, se procesa la cancelación y el agente confirma que el cupo ha sido liberado.
 
 ### 4.6 `get_telemedicine_status`
+
 - **Propósito:** Conocer el estado de la sala virtual de una cita inminente (si está lista, si el médico ya ingresó, tiempo para inicio).
 - **Parámetros de Entrada:**
   - `appointment_id` (string, obligatorio): UUID de la cita de telemedicina.

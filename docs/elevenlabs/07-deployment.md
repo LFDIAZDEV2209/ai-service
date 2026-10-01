@@ -48,18 +48,19 @@ separado con tag `prod` vía MCP — NO reutilizar el de dev); `VOICE_ENABLED=tr
 3. Smoke prod (sin app): login real en `https://erp.coppadresd.com/api/auth/login`
    (aplicación `app`) → `POST /api/v1/chat/voice/session` → 200 con signedUrl.
 4. App móvil:
-    ```bash
-    cd antares-paciente
-    npm run sync          # build production + cap sync (env → erp.coppadresd.com)
-    # checklist TestFlight de antares-paciente/AGENTS.md (version bump, archive, upload)
-    ```
-    Verificar que `dist/` NO contiene `sk_` ni la key: `rg -o "sk_[a-z0-9]+" dist/ || echo OK`.
+   ```bash
+   cd antares-paciente
+   npm run sync          # build production + cap sync (env → erp.coppadresd.com)
+   # checklist TestFlight de antares-paciente/AGENTS.md (version bump, archive, upload)
+   ```
+   Verificar que `dist/` NO contiene `sk_` ni la key: `rg -o "sk_[a-z0-9]+" dist/ || echo OK`.
 5. Probar en TestFlight: botón de voz → saludo del agente → "¿cuáles son mis
    próximas citas?" (tool real con JWT del device).
 
 ## Entornos (FASE 13)
 
-- Local: agente dev (`agent_4501m3qqzq0ne7qtpcf3p2wkec1a`), `.env` local.
-- Prod: agent_id por entorno en Secrets Manager; el endpoint solo emite
+- Local: agente dev (`agent_5501m3w6n1j7fe5tx02291nkvy8n`), `.env` local.
+- Prod: agente prod (`agent_1101m3w6pc64e9prz4bkvwct0hy9`) vía
+  `ELEVENLABS_AGENT_ID` en Secrets Manager; el endpoint solo emite
   sesiones para el agent_id configurado (allowlist implícita).
 - Nunca apuntar dev a prod: la config por entorno define agente y key.

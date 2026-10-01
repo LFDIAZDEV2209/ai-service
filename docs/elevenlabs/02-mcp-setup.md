@@ -1,7 +1,7 @@
 # 02 — Configuración del MCP de ElevenLabs en OpenCode
 
 > **Documento Operativo — Fase 2 del plan `PROMPT_ELEVENLABS.md`**  
-> **Estado:** Configurado y verificado por el orquestador (2026-09-29).
+> **Estado:** Configurado y verificado (2026-09-29). **Re-configurado con cuenta nueva el 2026-10-01** (migración de workspace; ver §1.1).
 
 ---
 
@@ -14,13 +14,14 @@ El orquestador ha verificado la conexión operativa del **Hosted MCP Server ofic
   ```text
   https://api.us.elevenlabs.io/v1/mcp
   ```
-- **Recursos existentes en el Workspace:**
-  El workspace cuenta actualmente con **1 agente configurado**:
-  - **`agent_id`:** `agent_4501m3qqzq0ne7qtpcf3p2wkec1a`
-  - **Nombre:** `Copp Adresd — Asistente Paciente (dev)`
-  - **`voice_id`:** `cjVigY5qzO86Huf0OWal` (voz optimizada para Conversational AI)
-  - **Tag:** `dev`
-  - **Métrica de uso:** `0` llamadas en los últimos 7 días (listo para pruebas).
+- **Recursos existentes en el Workspace (migración 2026-10-01):**
+  Tras el cambio de cuenta, el workspace nuevo inició vacío y se recrearon vía
+  hosted MCP **2 agentes** (config rescatada del workspace anterior ANTES del
+  logout; spec en `.coppadresd-context/elevenlabs-migration-2026-10-01/`):
+  - **Dev:** `agent_5501m3w6n1j7fe5tx02291nkvy8n` — `Copp Adresd — Asistente Paciente (dev)`, tag `dev`
+  - **Prod:** `agent_1101m3w6pc64e9prz4bkvwct0hy9` — `Copp Adresd — Asistente Paciente (prod)`, tag `prod`
+  - **`voice_id`:** `cjVigY5qzO86Huf0OWal` (default Conversational AI del workspace; igual al anterior)
+  - **8 client tools de negocio** recreadas (IDs nuevas en `agent-config.md`).
 - **Herramientas (tools) MCP disponibles y operativas:**
   - `agents_list`: Listar agentes del workspace.
   - `agents_get`: Obtener la configuración detallada de un agente por ID.
@@ -34,6 +35,7 @@ El orquestador ha verificado la conexión operativa del **Hosted MCP Server ofic
 
 > [!IMPORTANT]
 > Es fundamental distinguir el rol de este MCP de desarrollo frente a la arquitectura de producción:
+>
 > - **Rol del MCP en OpenCode:** Permite a los agentes de desarrollo (OpenCode/Antigravity) inspeccionar, configurar, actualizar prompts y auditar el agente de ElevenLabs en la nube mediante lenguaje natural durante el ciclo de vida del software.
 > - **Rol en Producción:** Los pacientes móviles **NO** utilizan este servidor MCP. En producción, la app móvil se conecta vía **WebRTC / WebSocket usando Signed URLs de corta duración** generadas por el backend, y el agente ejecuta **Tools de Negocio específicas** contra los servicios clínicos de CoppAdresd.
 
@@ -50,11 +52,13 @@ opencode mcp list
 ```
 
 **Resultado esperado:**
+
 ```text
 elevenlabs: https://api.us.elevenlabs.io/v1/mcp (connected)
 ```
 
 Para realizar una verificación funcional de lectura sin alterar recursos:
+
 - En la interfaz de comandos o TUI de OpenCode:
   ```text
   /mcp call elevenlabs agents_list {"limit": 5}
@@ -76,12 +80,12 @@ Si la sesión expira o el comando reporta `needs authentication`:
 
 ### 3.3 Diagnóstico y Depuración de Problemas Comunes
 
-| Error / Síntoma | Causa Probable | Solución Verificada |
-| :--- | :--- | :--- |
+| Error / Síntoma                                                                                          | Causa Probable                                                                              | Solución Verificada                                                                         |
+| :------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------ |
 | `Protected resource https://api.us.elevenlabs.io/v1/mcp does not cover https://api.elevenlabs.io/v1/mcp` | Mismatch de URL regional. Se registró la URL global en lugar de la región US del workspace. | Volver a agregar el MCP especificando explícitamente `https://api.us.elevenlabs.io/v1/mcp`. |
-| `Status 401 Unauthorized` al invocar tools MCP | Token OAuth expirado o revocado en el panel de ElevenLabs. | Ejecutar el procedimiento de reconexión (§3.2). |
-| `Agent not found (404)` | El `agent_id` referenciado no pertenece al workspace autenticado. | Ejecutar `agents_list` para verificar los IDs vigentes en el workspace actual. |
-| OpenCode no lista tools de ElevenLabs | El proceso MCP quedó suspendido o falló la negociación SSE. | Reiniciar la sesión de OpenCode o recargar con `opencode mcp restart elevenlabs`. |
+| `Status 401 Unauthorized` al invocar tools MCP                                                           | Token OAuth expirado o revocado en el panel de ElevenLabs.                                  | Ejecutar el procedimiento de reconexión (§3.2).                                             |
+| `Agent not found (404)`                                                                                  | El `agent_id` referenciado no pertenece al workspace autenticado.                           | Ejecutar `agents_list` para verificar los IDs vigentes en el workspace actual.              |
+| OpenCode no lista tools de ElevenLabs                                                                    | El proceso MCP quedó suspendido o falló la negociación SSE.                                 | Reiniciar la sesión de OpenCode o recargar con `opencode mcp restart elevenlabs`.           |
 
 ---
 

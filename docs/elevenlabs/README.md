@@ -38,8 +38,9 @@ cliente. Cambiar de cuenta ElevenLabs = cambiar 3 variables de entorno.
 ## Estado de implementación
 
 - ✅ MCP conectado a OpenCode (OAuth, región US) + verificación real.
-- ✅ Agente `agent_4501m3qqzq0ne7qtpcf3p2wkec1a` creado vía MCP (español,
-  prompt clínico, 8 client tools de negocio enlazadas, privacidad sanitaria).
+- ✅ Agentes recreados vía MCP en la cuenta nueva (migración 2026-10-01):
+  dev `agent_5501m3w6n1j7fe5tx02291nkvy8n` + prod `agent_1101m3w6pc64e9prz4bkvwct0hy9`
+  (español, prompt clínico, 8 client tools de negocio, privacidad sanitaria).
 - ✅ `ai-service`: `POST /internal/voice/session` + cliente ElevenLabs + tests.
 - ✅ Backend .NET: `POST /api/v1/chat/voice/session` (JWT, validación,
   auditoría, errores amigables) + tests.
