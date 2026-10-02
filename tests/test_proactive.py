@@ -182,3 +182,30 @@ async def test_no_llm_called_when_fake_has_no_responses(graph):
     messages = (state.values or {}).get("messages", [])
     assert len(messages) == 1
     assert messages[-1].content == "Sin LLM"
+
+
+async def test_system_role_injected_but_hidden_from_visible_history(graph):
+    """`role=system` persiste un SystemMessage en el estado (contexto LLM)
+    que `_visible_role` excluye del historial de la app."""
+    from langchain_core.messages import SystemMessage
+
+    from app.api.routes.threads import _visible_role
+
+    resp = await proactive_message(
+        ProactiveMessageRequest(
+            user_id="user-1",
+            message="Contexto interno: examen del 2026-09-14.",
+            thread_id="thread-sys",
+            role="system",
+        ),
+        graph=graph,
+    )
+    assert resp.message_id
+
+    state = await graph.aget_state(
+        {"configurable": {"thread_id": _storage_thread_id("user-1", "thread-sys")}}
+    )
+    messages = (state.values or {}).get("messages", [])
+    assert len(messages) == 1
+    assert isinstance(messages[-1], SystemMessage)
+    assert _visible_role(messages[-1]) is None
