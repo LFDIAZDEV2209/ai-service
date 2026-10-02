@@ -14,9 +14,10 @@ Canal interno: requiere `X-Internal-Key` (solo el backend .NET lo conoce).
 """
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_graph
@@ -40,6 +41,10 @@ class ProactiveMessageRequest(BaseModel):
     message: str = Field(min_length=1)
     # Si se omite, se usa un thread estable del usuario (p. ej. `proactive-{user_id}`).
     thread_id: str | None = None
+    # Rol del mensaje inyectado: `bot` (AIMessage, visible en el historial)
+    # o `system` (SystemMessage, invisible para la app pero presente en el
+    # contexto del LLM — p. ej. resumen de un examen subido).
+    role: Literal["bot", "system"] = Field(default="bot")
 
 
 class ProactiveMessageResponse(BaseModel):
@@ -66,12 +71,18 @@ async def proactive_message(
     storage_thread_id = _storage_thread_id(payload.user_id, thread_id)
     config = {"configurable": {"thread_id": storage_thread_id}}
 
-    # El AIMessage recibe un id automático (uuid) al construirse; `add_messages`
+    # El mensaje recibe un id automático (uuid) al construirse; `add_messages`
     # lo agrega tal cual al estado (no hay duplicado previo en un thread nuevo).
     # `as_node="agent"` es obligatorio cuando el thread ya tiene checkpoints:
     # sin él, LangGraph no puede deducir qué nodo actualizó el estado y lanza
     # `InvalidUpdateError: Ambiguous update, specify as_node`.
-    message = AIMessage(content=payload.message)
+    # `system` queda fuera del historial visible (ver `_visible_role`) pero sí
+    # entra al contexto del LLM en los siguientes turnos.
+    message = (
+        SystemMessage(content=payload.message)
+        if payload.role == "system"
+        else AIMessage(content=payload.message)
+    )
 
     try:
         await graph.aupdate_state(config, {"messages": [message]}, as_node="agent")
