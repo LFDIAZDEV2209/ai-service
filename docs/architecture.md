@@ -330,3 +330,7 @@ uv run pytest tests/test_graph.py::test_agent_answers_simple_message  # test esp
 - ❌ Infraestructura innecesaria
 
 **Enfoque actual:** Agente base estable y probado, independiente del backend.
+
+## Fuentes RAG archivadas (QA 2026-10-08)
+
+PgVectorStore consulta el catálogo autoritativo `agents.documents` y `agents.knowledge_bases` en la misma base PostgreSQL. Solo recupera chunks cuyo documento está `Listo`, cuya KB está `Activo` y cuyos IDs de documento/KB coinciden con ambos catálogos. Archivar desde ERP excluye de inmediato los chunks residuales sin eliminar el original; restaurar reindexa el documento antes de volver a `Listo`. No confiar en que una eliminación de chunks asíncrona haya terminado para retirar una fuente.
