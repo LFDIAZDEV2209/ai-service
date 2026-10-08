@@ -152,7 +152,9 @@ class ExecutionTracker:
         `flow_trace` (opcional): traza de nodos del stream (start/end con
         duración) para reproducir el flujo en la UI de visualización.
         """
-        messages = list(result_state.get("messages", []))
+        # Solo el turno que se está completando; el historial sigue intacto en
+        # el checkpoint para el LLM, pero no debe inflar tokens/fuentes/latencia.
+        messages = list(result_state.get("messages", []))[result_state.get("turn_start_index", 0) :]
         tokens_in, tokens_out = _usage_stats(messages, model or "unknown")
         answer = ""
         for msg in reversed(messages):

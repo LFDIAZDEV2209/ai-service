@@ -20,6 +20,9 @@ class AgentState(TypedDict, total=False):
     # Mensaje crudo del usuario (entrada del grafo)
     input: str
 
+    # Inicio del turno actual dentro del historial acumulado (telemetría por ejecución).
+    turn_start_index: int
+
     # Historial de conversación (reducer: append + dedupe)
     messages: Annotated[list[AnyMessage], add_messages]
 

@@ -7,7 +7,7 @@ acceso a la BD se mockea con una sesión asíncrona fake.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -15,6 +15,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.agents.runtime_config import AgentRuntimeConfig
 from app.agents.runtime_registry import AgentRuntimeError, AgentRuntimeRegistry
+from app.tools.retrieval import make_retrieve_tool
 from tests.fakes import FakeToolAwareModel
 
 AGENT_ID = "11111111-1111-1111-1111-111111111111"
@@ -37,7 +38,7 @@ def make_registry(**overrides):
     )
 
 
-def make_session_with_row(config: dict) -> AsyncMock:
+def make_session_with_row(config: dict, knowledge_bases: list[dict] | None = None) -> AsyncMock:
     """Sesión asíncrona fake cuya consulta devuelve una fila de runtime config."""
     row = SimpleNamespace(
         agent_type_id=AGENT_ID,
@@ -48,7 +49,20 @@ def make_session_with_row(config: dict) -> AsyncMock:
     result = MagicMock()
     result.scalar_one_or_none.return_value = row
     session = AsyncMock()
-    session.execute.return_value = result
+    knowledge_result = MagicMock()
+    knowledge_result.mappings.return_value.all.return_value = (
+        knowledge_bases
+        if knowledge_bases is not None
+        else [
+            {"id": kb, "scope": "Agent"}
+            for kb in config.get("retrieval_config", {}).get("knowledge_base_ids", [])
+        ]
+    )
+
+    async def execute(statement, *_args, **_kwargs):
+        return knowledge_result if "agents.knowledge_bases" in str(statement) else result
+
+    session.execute.side_effect = execute
     return session
 
 
@@ -166,3 +180,68 @@ async def test_retrieval_disabled_no_tool():
     registry = make_registry()
     compiled = await registry.get_agent(AGENT_ID, session)
     assert compiled.runtime_config.retrieval_config.enabled is False
+
+
+async def test_retrieval_empty_selection_resolves_active_global_and_owned_bases():
+    session = make_session_with_row(
+        {"retrieval_config": {"enabled": True, "knowledge_base_ids": []}},
+        knowledge_bases=[{"id": "global", "scope": "Global"}, {"id": "owned", "scope": "Agent"}],
+    )
+    compiled = await make_registry().get_agent(AGENT_ID, session)
+    assert compiled.runtime_config.retrieval_config.knowledge_base_ids == ["global", "owned"]
+    statement, params = session.execute.call_args.args
+    assert "status = 'Activo'" in str(statement)
+    assert "agent_type_id::text = :agent_type_id" in str(statement)
+    assert params == {"agent_type_id": AGENT_ID}
+
+
+async def test_retrieval_explicit_selection_keeps_globals_and_excludes_unassigned_ids():
+    session = make_session_with_row(
+        {
+            "retrieval_config": {
+                "enabled": True,
+                "knowledge_base_ids": ["chosen", "foreign", "inactive"],
+            }
+        },
+        knowledge_bases=[
+            {"id": "global", "scope": "Global"},
+            {"id": "chosen", "scope": "Agent"},
+            {"id": "other-owned", "scope": "Agent"},
+        ],
+    )
+    compiled = await make_registry().get_agent(AGENT_ID, session)
+    assert compiled.runtime_config.retrieval_config.knowledge_base_ids == ["chosen", "global"]
+
+
+async def test_retrieval_cached_graph_refreshes_when_catalog_changes():
+    bases = [{"id": "global", "scope": "Global"}]
+    session = make_session_with_row({"retrieval_config": {"enabled": True}}, knowledge_bases=bases)
+    registry = make_registry()
+    first = await registry.get_agent(AGENT_ID, session)
+    assert (await registry.get_agent(AGENT_ID, session)).graph is first.graph
+    bases.clear()
+    second = await registry.get_agent(AGENT_ID, session)
+    assert second.graph is not first.graph
+    assert second.runtime_config.retrieval_config.knowledge_base_ids == []
+    # Reaparecer una global también recompila; la configuración vacía original se conserva.
+    bases.append({"id": "new-global", "scope": "Global"})
+    third = await registry.get_agent(AGENT_ID, session)
+    assert third.runtime_config.retrieval_config.knowledge_base_ids == ["new-global"]
+
+
+async def test_resolved_knowledge_bases_bind_filtered_retrieval_tool():
+    session = make_session_with_row(
+        {"retrieval_config": {"enabled": True, "knowledge_base_ids": [], "top_k": 4}},
+        knowledge_bases=[{"id": "global", "scope": "Global"}],
+    )
+    with patch(
+        "app.agents.runtime_registry.make_retrieve_tool",
+        wraps=make_retrieve_tool,
+    ) as make_tool:
+        compiled = await make_registry().get_agent(AGENT_ID, session)
+        make_tool.assert_called_once_with(knowledge_base_ids=["global"], top_k=4)
+        result = await compiled.graph.ainvoke(
+            {"input": "Hola", "messages": [], "tools_used": [], "suggestions": []},
+            config={"configurable": {"thread_id": "scope-test"}},
+        )
+        assert result["messages"][-1].content == "respuesta"

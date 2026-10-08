@@ -10,6 +10,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.graph_descriptor import build_graph_descriptor
+from app.agents.knowledge_scope import resolve_knowledge_base_ids
 from app.agents.runtime_config import AgentRuntimeConfig as AgentRuntimeConfigSchema
 from app.agents.runtime_registry import registry as runtime_registry
 from app.api.deps import get_db_session
@@ -160,6 +161,10 @@ async def get_agent_graph(
         )
         return build_graph_descriptor(agent_type_id=agent_type_id)
 
+    if config.retrieval_config.enabled:
+        config.retrieval_config.knowledge_base_ids = await resolve_knowledge_base_ids(
+            session, agent_type_id, config.retrieval_config.knowledge_base_ids
+        )
     return build_graph_descriptor(
         agent_type_id=agent_type_id,
         version_id=row.version_id,

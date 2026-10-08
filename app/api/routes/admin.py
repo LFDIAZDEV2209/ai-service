@@ -88,7 +88,7 @@ async def _load_extra(execution: AgentExecution, session: AsyncSession) -> dict:
     feedbacks = (
         (
             await session.execute(
-                select(AgentFeedback).where(AgentFeedback.thread_id == execution.thread_id)
+                select(AgentFeedback).where(AgentFeedback.execution_id == execution.id)
             )
         )
         .scalars()

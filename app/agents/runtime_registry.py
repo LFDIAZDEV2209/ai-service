@@ -15,12 +15,13 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.knowledge_scope import resolve_knowledge_base_ids
 from app.agents.runtime_config import AgentRuntimeConfig
 from app.db.models import AgentRuntimeConfig as AgentRuntimeConfigRow
 from app.graph.graph import build_graph
@@ -48,6 +49,7 @@ class CompiledAgent:
     version_id: str
     graph: Any
     runtime_config: AgentRuntimeConfig
+    configured_knowledge_base_ids: tuple[str, ...] = ()
 
 
 class AgentRuntimeRegistry:
@@ -95,6 +97,21 @@ class AgentRuntimeRegistry:
         with self._lock:
             cached = self._cache.get(agent_type_id)
         if cached is not None:
+            retrieval = cached.runtime_config.retrieval_config
+            if retrieval.enabled:
+                ids = await resolve_knowledge_base_ids(
+                    session, agent_type_id, cached.configured_knowledge_base_ids
+                )
+                if ids != retrieval.knowledge_base_ids:
+                    config = cached.runtime_config.model_copy(deep=True)
+                    config.retrieval_config.knowledge_base_ids = ids
+                    compiled = await self._compile(agent_type_id, cached.version_id, config)
+                    compiled = replace(
+                        compiled, configured_knowledge_base_ids=cached.configured_knowledge_base_ids
+                    )
+                    with self._lock:
+                        self._cache[agent_type_id] = compiled
+                    return compiled
             return cached
 
         return await self._load_and_compile(agent_type_id, session)
@@ -120,7 +137,13 @@ class AgentRuntimeRegistry:
             )
 
         runtime_config = AgentRuntimeConfig.model_validate(row.config)
+        configured_ids = tuple(runtime_config.retrieval_config.knowledge_base_ids)
+        if runtime_config.retrieval_config.enabled:
+            runtime_config.retrieval_config.knowledge_base_ids = await resolve_knowledge_base_ids(
+                session, agent_type_id, configured_ids
+            )
         compiled = await self._compile(agent_type_id, row.version_id or "", runtime_config)
+        compiled = replace(compiled, configured_knowledge_base_ids=configured_ids)
 
         with self._lock:
             if len(self._cache) >= _MAX_CACHED_GRAPHS:
@@ -158,10 +181,10 @@ class AgentRuntimeRegistry:
 
         tools = self._select_tools(runtime_config.tools, agent_type_id)
 
-        # RAG: si el agente tiene retrieval habilitado Y KBs explícitas, se le
+        # RAG: si el agente tiene retrieval habilitado Y IDs resueltos, se le
         # inyecta la tool de recuperación limitada a sus KBs (aislamiento entre
         # agentes). `enabled` sin KBs no agrega la tool: un retriever sin filtro
-        # recuperaría chunks de KBs ajenas (globales y privadas de otros).
+        # recuperaría chunks de KBs ajenas o inactivas.
         retrieval = runtime_config.retrieval_config
         if retrieval.enabled and retrieval.knowledge_base_ids:
             tools.append(

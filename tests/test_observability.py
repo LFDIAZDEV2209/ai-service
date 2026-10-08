@@ -252,3 +252,61 @@ async def test_tracker_complete_sin_registro_no_falla():
         model=None,
         latency_ms=10,
     )
+
+
+async def test_tracker_only_counts_sources_and_tokens_from_current_turn():
+    session = make_session()
+    tracker = ExecutionTracker(session)
+    execution_id = await tracker.start(
+        thread_id="same-thread",
+        agent_type_id="base",
+        version_id=None,
+        agent_instance_id=None,
+        user_id="patient",
+        provider=None,
+        model=None,
+        message="19 por 7",
+    )
+    old_source = ToolMessage(
+        content='[FUENTES: [{"source": "old.md", "score": 0.9}]]',
+        name="retrieve_knowledge",
+        tool_call_id="old",
+    )
+    old_answer = AIMessage(
+        content="Cita sugerida",
+        usage_metadata={
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "total_tokens": 120,
+        },
+    )
+    answer = AIMessage(
+        content="133",
+        usage_metadata={
+            "input_tokens": 10,
+            "output_tokens": 2,
+            "total_tokens": 12,
+        },
+    )
+    await tracker.complete(
+        execution_id,
+        result_state={
+            "messages": [
+                HumanMessage(content="Consulta previa"),
+                old_source,
+                old_answer,
+                HumanMessage(content="19 por 7"),
+                answer,
+            ],
+            "turn_start_index": 3,
+            "tools_used": [],
+            "suggestions": [],
+        },
+        model=None,
+        latency_ms=10,
+    )
+    row = session.fetched[execution_id]
+    assert row.tokens_in == 10
+    assert row.tokens_out == 2
+    assert row.output["rag_sources"] == []
+    assert row.output["suggestions"] == []

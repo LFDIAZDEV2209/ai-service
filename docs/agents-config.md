@@ -136,3 +136,33 @@ Los perfiles actuales: `base`, `nutrition`, `medical`, `psychology`.
 - [ ] KBs RAG por agente (`retrieval_config.knowledge_base_ids`) para dar
       contexto documental a cada perfil.
 - [ ] Versionado / historial de prompts por agente.
+
+## Correcciones QA ERP/app — 2026-10-08
+
+Para agentes ejecutados mediante `agent_type_id`, el runtime resuelve el alcance
+RAG consultando el catálogo compartido `agents.knowledge_bases`. El backend .NET
+sigue siendo dueño de esa tabla; el AI Service solo requiere lectura y no crea
+migraciones fuera del esquema `ai`.
+
+- Solo se incluyen bases `Activo`: globales y las propias del agente.
+- Una selección vacía incorpora todas las propias y globales activas. Una
+  selección explícita restringe las propias y conserva las globales activas.
+- El vector store siempre recibe IDs concretos; sin bases permitidas, no se
+  inyecta `retrieve_knowledge`. Nunca se consulta sin filtro.
+- El alcance se verifica al obtener el agente, incluso con grafo cacheado; una
+  activación, desactivación o eliminación de KB se refleja en el siguiente turno.
+  El descriptor del playground usa la misma resolución.
+
+Las calificaciones del monitoreo se asocian por `execution_id`; compartir
+`thread_id` no transmite la calificación a otras respuestas. El feedback antiguo
+sin ejecución no se asigna a una respuesta arbitraria.
+
+El checkpoint conserva la conversación. Al entrar en cada turno se reinician
+`suggestions`, `tools_used` y fuentes RAG; los tokens y fuentes de la ejecución
+se calculan desde el límite del turno actual. Esto evita que una propuesta de
+cita previa reaparezca al responder, por ejemplo, una operación matemática.
+
+Validación automatizada: `uv run pytest`, sin API keys. Los fixtures establecen
+la configuración de test antes de importar el motor y desactivan la migración
+por defecto. Los tests de carga de laboratorios inyectan un modelo falso también
+para archivos inválidos. No sustituyen una prueba con proveedores y datos reales.

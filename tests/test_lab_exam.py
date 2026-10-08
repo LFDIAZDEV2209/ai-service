@@ -90,8 +90,9 @@ def fake_model_unreadable():
 
 
 @pytest.fixture
-def test_app():
+def test_app(fake_model_unreadable):
     app = create_app()
+    app.dependency_overrides[get_lab_exam_model] = lambda: fake_model_unreadable
     app.dependency_overrides[get_db_session] = FakeDbSession
     return app
 

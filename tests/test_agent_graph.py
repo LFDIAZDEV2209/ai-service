@@ -69,9 +69,7 @@ def test_descriptor_runtime_con_memoria_rag_y_tools():
         max_tool_calls=5,
         recursion_limit=18,
     )
-    graph = build_graph_descriptor(
-        agent_type_id="agente-2", version_id="v-9", config=config
-    )
+    graph = build_graph_descriptor(agent_type_id="agente-2", version_id="v-9", config=config)
 
     assert graph.source == "runtime"
     assert graph.version_id == "v-9"
@@ -119,9 +117,7 @@ def test_descriptor_meta_por_nodo_para_drawer_playground():
         max_tool_calls=5,
         recursion_limit=18,
     )
-    graph = build_graph_descriptor(
-        agent_type_id="agente-4", version_id="v-1", config=config
-    )
+    graph = build_graph_descriptor(agent_type_id="agente-4", version_id="v-1", config=config)
 
     by_id = {node.id: node for node in graph.nodes}
     agent_meta = by_id["agent"].meta
@@ -264,9 +260,7 @@ def test_stream_emite_eventos_flow_start_y_end(client):
         assert end["step"] >= 1
         assert end["duration_ms"] >= 0
         matching = [
-            evt
-            for evt in starts
-            if evt["node"] == end["node"] and evt["step"] == end["step"]
+            evt for evt in starts if evt["node"] == end["node"] and evt["step"] == end["step"]
         ]
         assert matching, f"sin start para {end['node']} step {end['step']}"
 
@@ -278,3 +272,17 @@ def test_stream_emite_eventos_flow_start_y_end(client):
         if event == "message" and data and data.get("type") == "token"
     }
     assert "agent" in token_nodes
+
+
+async def test_graph_endpoint_resolves_active_knowledge_scope():
+    from app.api.routes.internal import get_agent_graph
+    from tests.test_runtime_registry import AGENT_ID, make_session_with_row
+
+    session = make_session_with_row(
+        {"retrieval_config": {"enabled": True, "knowledge_base_ids": []}},
+        knowledge_bases=[{"id": "global", "scope": "Global"}],
+    )
+    descriptor = await get_agent_graph(AGENT_ID, session)
+    assert descriptor.config.rag.enabled is True
+    assert descriptor.config.rag.knowledge_base_count == 1
+    assert "retrieve_knowledge" in descriptor.config.tools

@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
 from langgraph.config import get_config
 from langgraph.prebuilt import ToolNode
+from langgraph.types import Overwrite
 
 from app.agents.prompts import BASE_SYSTEM_PROMPT, build_control_guidance
 from app.agents.registry import AgentProfile
@@ -29,9 +30,18 @@ def guardrails_node(state: AgentState) -> dict:
     `state["input"]` y el flujo continúa al agente.
     """
     result = check_input_guardrails(state.get("input", ""))
+    # El checkpointer conserva el historial, pero estas salidas pertenecen a
+    # UN turno. Overwrite evita que operator.add conserve acciones anteriores.
+    turn_state = {
+        "tools_used": Overwrite([]),
+        "suggestions": Overwrite([]),
+        "rag_sources": [],
+        "turn_start_index": len(state.get("messages", [])),
+    }
 
     if not result.safe:
         return {
+            **turn_state,
             "guardrail": {
                 "safe": False,
                 "reason": result.reason,
@@ -43,6 +53,7 @@ def guardrails_node(state: AgentState) -> dict:
         }
 
     return {
+        **turn_state,
         "input": result.sanitized,
         "guardrail": {"safe": True, "pattern": None, "sanitized": result.sanitized},
     }

@@ -186,3 +186,40 @@ def test_suggest_appointment_defaults():
     parsed = json.loads(raw)
     assert parsed["urgency"] == "normal"
     assert parsed["cta_text"] == "Agenda tu cita aquí"
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+def test_appointment_suggestion_does_not_leak_to_next_turn(streaming):
+    """Mismo thread: cita → cálculo. La segunda respuesta no repite el CTA."""
+    fake = _tool_call_model()
+    fake.responses.append(AIMessage(content="19 por 7 es 133."))
+    graph = build_graph(model=fake, checkpointer=MemorySaver())
+    app = create_app()
+    app.dependency_overrides[get_graph] = lambda: graph
+    app.dependency_overrides[get_db_session] = FakeDbSession
+    path = "/api/v1/chat/stream" if streaming else "/api/v1/chat"
+    with TestClient(app) as client:
+        first = client.post(
+            path,
+            json={"message": "Quiero agendar una cita", "thread_id": "shared"},
+            headers=HEADERS,
+        )
+        first_body = _parse_sse_done(first.text) if streaming else first.json()
+        assert first_body["suggestions"] == [EXPECTED_SUGGESTION]
+        second = client.post(
+            path, json={"message": "Cuánto es 19 por 7", "thread_id": "shared"}, headers=HEADERS
+        )
+        assert second.status_code == 200
+        second_body = _parse_sse_done(second.text) if streaming else second.json()
+        assert second_body["suggestions"] == []
+        if not streaming:
+            assert second_body["tools_used"] == []
+
+
+async def test_blocked_turn_also_clears_previous_appointment_actions():
+    graph = build_graph(model=_tool_call_model(), checkpointer=MemorySaver())
+    config = _config("blocked-turn")
+    await graph.ainvoke({"input": "Quiero una cita"}, config=config)
+    result = await graph.ainvoke({"input": " "}, config=config)
+    assert result["suggestions"] == []
+    assert result["tools_used"] == []
