@@ -55,6 +55,8 @@ def guardrails_node(state: AgentState) -> dict:
     return {
         **turn_state,
         "input": result.sanitized,
+        # Una sola entrada por turno: el ciclo agent/tools reutiliza el historial.
+        "messages": [HumanMessage(content=result.sanitized)],
         "guardrail": {"safe": True, "pattern": None, "sanitized": result.sanitized},
     }
 
@@ -147,14 +149,12 @@ def make_agent_node(
         prompt = [
             *[SystemMessage(content=block) for block in system_blocks],
             *history,
-            HumanMessage(content=state.get("input", "")),
         ]
 
         response = await active_model.ainvoke(prompt)
         return {
-            # Persistimos el mensaje del usuario (sanitizado) + la respuesta,
-            # para que el checkpointer conserve el historial completo.
-            "messages": [HumanMessage(content=state.get("input", "")), response],
+            # Guardrails ya persistió la entrada; no repetirla tras cada herramienta.
+            "messages": [response],
             "provider": model.__class__.__name__,
             "agent": profile.key if profile else state.get("agent", "base"),
         }

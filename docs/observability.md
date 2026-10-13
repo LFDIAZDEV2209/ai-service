@@ -96,3 +96,5 @@ best-effort.
 `GET /internal/agents/ingest/{document_id}/status?knowledge_base_id=...` exige la autenticación interna existente y cuenta chunks del par exacto documento/KB. Permite que el backend restaure documentos archivados cuyos chunks siguen disponibles, aun si falta el objeto de almacenamiento original. No genera contenido ni sustituye documentos. Sin chunks retenidos continúa el reindexado normal.
 
 `completed_tool_history` conserva conversaciones válidas y omite llamadas/respuestas de herramientas incompletas antes de invocar el proveedor. La prueba real de seguimiento requiere que el ERP mantenga el mismo thread hasta limpiar la conversación.
+
+La entrada sanitizada se agrega una sola vez en `guardrails`. El nodo `agent` agrega únicamente su respuesta: al regresar de `tools`, el último mensaje del prompt es el resultado de la herramienta. Repetir la entrada después del resultado provocaba cálculos reiterados hasta agotar el límite de recursión. La regresión recorre dos turnos con calculadora y verifica el prompt real recibido por el modelo y la ausencia de entradas duplicadas.
