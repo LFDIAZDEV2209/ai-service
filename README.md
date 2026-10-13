@@ -15,15 +15,15 @@ conocimiento de la base de datos de la API y captura de datos hacia un futuro CR
 
 ## 🧱 Stack
 
-| Capa            | Tecnología                                   |
-| --------------- | -------------------------------------------- |
-| Grafo agente    | LangGraph (StateGraph, checkpointer, subgraphs) |
-| API             | FastAPI + uvicorn (streaming SSE)            |
-| LLM            | Multi-proveedor: Anthropic Claude / OpenAI   |
-| Memoria        | Checkpointer LangGraph (MemorySaver dev → Postgres prod) |
-| RAG             | Chunker propio + embeddings + vector store (pgvector en prod) |
-| Seguridad      | Guardrails: sanitización, prompt injection (EN/ES), rate limit |
-| Tooling        | uv, pytest, Docker                           |
+| Capa         | Tecnología                                                     |
+| ------------ | -------------------------------------------------------------- |
+| Grafo agente | LangGraph (StateGraph, checkpointer, subgraphs)                |
+| API          | FastAPI + uvicorn (streaming SSE)                              |
+| LLM          | Multi-proveedor: Anthropic Claude / OpenAI                     |
+| Memoria      | Checkpointer LangGraph (MemorySaver dev → Postgres prod)       |
+| RAG          | Chunker propio + embeddings + vector store (pgvector en prod)  |
+| Seguridad    | Guardrails: sanitización, prompt injection (EN/ES), rate limit |
+| Tooling      | uv, pytest, Docker                                             |
 
 ---
 
@@ -33,7 +33,7 @@ conocimiento de la base de datos de la API y captura de datos hacia un futuro CR
 cd ai-service
 cp .env.example .env        # agrega tus API keys
 uv sync                    # instala dependencias (crea .venv)
-uv run uvicorn main:app --reload
+uv run python run_dev.py   # dev server (puerto 8000) — SIEMPRE run_dev.py en Windows
 ```
 
 Sin `uv`: `python -m venv .venv && pip install -r requirements.txt`
@@ -132,16 +132,16 @@ Cliente (frontend/UI)
 
 ## 🔌 Endpoints
 
-| Método | Ruta                       | Descripción                                  |
-| ------ | -------------------------- | -------------------------------------------- |
-| POST   | `/api/v1/chat`             | Respuesta completa del agente (incluye `execution_id`) |
-| POST   | `/api/v1/chat/stream`      | Streaming SSE (tokens + nodos en vivo)       |
-| POST   | `/api/v1/chat/feedback`    | Feedback 1-5 → experiencia aprendida (adaptive memory) |
-| GET    | `/api/v1/threads/{id}/state` | Historial persistido de una conversación   |
-| POST   | `/api/v1/ingest`           | Indexa docs `.md/.txt` para el RAG           |
-| GET    | `/api/v1/admin/executions` | Lista ejecuciones (filtros + paginación)     |
-| GET    | `/api/v1/admin/executions/{id}` | Detalle completo (12 preguntas del monitoreo) |
-| GET    | `/api/v1/health`           | Healthcheck                                  |
+| Método | Ruta                            | Descripción                                            |
+| ------ | ------------------------------- | ------------------------------------------------------ |
+| POST   | `/api/v1/chat`                  | Respuesta completa del agente (incluye `execution_id`) |
+| POST   | `/api/v1/chat/stream`           | Streaming SSE (tokens + nodos en vivo)                 |
+| POST   | `/api/v1/chat/feedback`         | Feedback 1-5 → experiencia aprendida (adaptive memory) |
+| GET    | `/api/v1/threads/{id}/state`    | Historial persistido de una conversación               |
+| POST   | `/api/v1/ingest`                | Indexa docs `.md/.txt` para el RAG                     |
+| GET    | `/api/v1/admin/executions`      | Lista ejecuciones (filtros + paginación)               |
+| GET    | `/api/v1/admin/executions/{id}` | Detalle completo (12 preguntas del monitoreo)          |
+| GET    | `/api/v1/health`                | Healthcheck                                            |
 
 Endpoints internos (backend → AI Service, `X-Internal-Key`): `POST /internal/agents/sync-config`, `POST /internal/agents/ingest`, `DELETE /internal/agents/ingest/{id}`.
 

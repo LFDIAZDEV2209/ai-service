@@ -1,6 +1,6 @@
 # AI Service — Agent Guide
 
-> **Contexto compartido del workspace**: lee `../.coppadresd-context/` (estado actual, arquitectura, decisiones, ítems abiertos, runbook) ANTES de modificar código. Última verificación: 2026-09-30. Aquí vive la integración ElevenLabs (`/internal/voice/session`).
+> **Contexto compartido del workspace**: usa el sistema `.ai/` (recuperación bajo demanda) ANTES de modificar código: MCP `context-broker` (`workspace_overview`, `get_dependencies`, `search_knowledge`...) o lectura directa — `../.ai/workspace/OVERVIEW.md` (estado), `../.ai/workspace/OPEN-ITEMS.md` (backlog), `../.ai/knowledge/` (decisiones/lessons/incidents). Última verificación: 2026-10-02. Aquí vive la integración ElevenLabs (`/internal/voice/session`).
 
 Python 3.11+, LangGraph, FastAPI. Agente de IA escalable para CoppAddresd.
 
