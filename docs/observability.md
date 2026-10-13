@@ -90,3 +90,9 @@ uv run pytest tests/test_observability.py -v   # 9 tests, sin BD ni API keys
 Cubren: parseo de fuentes RAG (incl. JSON inválido), start/complete/fail del
 tracker (tokens, latencia, answer), content en bloques de Claude, robustez
 best-effort.
+
+## Recuperación QA 2026-10-13
+
+`GET /internal/agents/ingest/{document_id}/status?knowledge_base_id=...` exige la autenticación interna existente y cuenta chunks del par exacto documento/KB. Permite que el backend restaure documentos archivados cuyos chunks siguen disponibles, aun si falta el objeto de almacenamiento original. No genera contenido ni sustituye documentos. Sin chunks retenidos continúa el reindexado normal.
+
+`completed_tool_history` conserva conversaciones válidas y omite llamadas/respuestas de herramientas incompletas antes de invocar el proveedor. La prueba real de seguimiento requiere que el ERP mantenga el mismo thread hasta limpiar la conversación.
