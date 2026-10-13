@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import suppress
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.config import get_config
 from langgraph.prebuilt import ToolNode
@@ -59,6 +59,32 @@ def guardrails_node(state: AgentState) -> dict:
     }
 
 
+def completed_tool_history(messages: list[BaseMessage]) -> list[BaseMessage]:
+    """Conserva turnos anteriores sin reenviar tool_use interrumpidos al proveedor."""
+    history: list[BaseMessage] = []
+    index = 0
+    while index < len(messages):
+        message = messages[index]
+        index += 1
+        if isinstance(message, ToolMessage):
+            continue
+        if isinstance(message, AIMessage) and message.tool_calls:
+            expected = {call["id"] for call in message.tool_calls}
+            results: list[ToolMessage] = []
+            while index < len(messages) and isinstance(messages[index], ToolMessage):
+                result = messages[index]
+                if result.tool_call_id in expected:
+                    results.append(result)
+                index += 1
+            if {result.tool_call_id for result in results} == expected:
+                history.extend([message, *results])
+            # Una llamada incompleta no es una respuesta utilizable. Conservamos
+            # los turnos completos anteriores y permitimos volver a preguntar.
+            continue
+        history.append(message)
+    return history
+
+
 def make_agent_node(
     model: BaseChatModel,
     system_prompt: str = BASE_SYSTEM_PROMPT,
@@ -88,7 +114,7 @@ def make_agent_node(
         active_tools = profile.tools if profile and profile.tools else (tools or ALL_TOOLS)
         active_model = model.bind_tools(list(active_tools))
 
-        history = list(state.get("messages", []))
+        history = completed_tool_history(list(state.get("messages", [])))
         system_blocks = [active_prompt]
 
         # Memoria de largo plazo: se inyecta como mensaje de sistema adicional

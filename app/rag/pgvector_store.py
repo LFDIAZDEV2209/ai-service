@@ -140,6 +140,14 @@ class PgVectorStore:
         )
         return result.rowcount or 0
 
+    async def count_document(self, document_id: str, knowledge_base_id: str) -> int:
+        """Cuenta solo los chunks retenidos del par documento/KB indicado."""
+        stmt = select(func.count(KnowledgeChunk.id)).where(
+            KnowledgeChunk.document_id == document_id,
+            KnowledgeChunk.knowledge_base_id == knowledge_base_id,
+        )
+        return int((await self._session.execute(stmt)).scalar_one())
+
     async def count(self, knowledge_base_id: str | None = None) -> int:
         """Total de chunks (opcionalmente filtrado por KB)."""
         stmt = select(func.count(KnowledgeChunk.id))

@@ -210,6 +210,22 @@ async def ingest_document(
     )
 
 
+@router.get("/agents/ingest/{document_id}/status", response_model=DocumentIngestResponse)
+async def document_index_status(
+    document_id: str,
+    knowledge_base_id: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> DocumentIngestResponse:
+    """Permite restaurar un índice retenido al archivar sin volver a ingerir el blob."""
+    count = await PgVectorStore(session).count_document(document_id, knowledge_base_id)
+    return DocumentIngestResponse(
+        document_id=document_id,
+        knowledge_base_id=knowledge_base_id,
+        status="indexado" if count else "sin_indexar",
+        chunks_created=count,
+    )
+
+
 @router.delete("/agents/ingest/{document_id}", response_model=DocumentIngestResponse)
 async def delete_document_chunks(
     document_id: str,
