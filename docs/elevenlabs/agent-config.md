@@ -21,8 +21,9 @@ nunca reutilizar el dev en prod (regla de `07-deployment.md`).
 
 ## Config compartida (verificada post-creación vía agents_get)
 
-- Idioma `es`; espejo estricto es/en con `language_detection`
-  (`only_at_conversation_start=false`).
+- Idioma `es` (fallback estático; desde 2026-10-19 el idioma real de cada
+  sesión se fija por PATCH por sesión) — el prompt ya NO fuerza espejo
+  (`language_detection` sigue activa como tool del sistema).
 - LLM `gemini-2.5-flash`, `temperature 0.4` (estabilidad anti-babbling; ver
   fix del 2026-09-29 más abajo).
 - TTS `eleven_flash_v2_5`, `optimize_streaming_latency 3`,
@@ -48,8 +49,10 @@ Prompt completo en el agente (rescatado y recreado verbatim; único cambio:
 typo "párralo" → "paralo"). Reglas clave: no inventar datos (tools primero),
 identidad resuelta por el sistema (nunca conversacional), confirmación
 explícita antes de acciones sensibles, no diagnóstico/prescripción, no PHI de
-terceros, respuestas cortas habladas, manejo de silencios, derivación a
-humano, y emergencias → botón SOS de la app.
+terceros, respuestas cortas habladas, manejo de silencios, emergencias → botón
+SOS de la app. **Actualizado 2026-10-19 (ver detalle más abajo)**: sin
+derivación a humano (canal inexistente; 100% CoppAI) y el idioma lo decide el
+`language` de la sesión, no el espejo del paciente.
 
 ### Idioma (fix de comportamiento, 2026-09-29) — conservado en la migración
 
@@ -78,13 +81,18 @@ humano, y emergencias → botón SOS de la app.
   competir por la config (carrera benigna: la sesión lee la config al
   conectar). Un cambio de idioma a mitad de llamada de voz toma efecto en
   la siguiente sesión.
-- **PENDIENTE manual (dashboard)**: en el system prompt del agente, la
-  sección de 'derivación a humano' hay que reemplazarla por la regla sin
-  canal humano (la atención es 100% asistida por CoppAI; nunca ofrecer
-  humano; ofrecer agendar cita con `suggest_appointment`; hablar siempre el
-  idioma configurado). Mientras no se edite, el agente de VOZ puede seguir
-  ofreciendo humanos — el bloque equivalente ya cubre a los agentes de
-  TEXTO (`build_turn_policy` en `app/agents/prompts.py`).
+- **System prompt actualizado (2026-10-19, APLICADO en ambos agentes vía
+  `PATCH /v1/convai/agents/{agent_id}` con
+  `conversation_config.agent.prompt.prompt`; parche parcial — el resto del
+  objeto `prompt`, incl. los client tools, queda intacto)**: la sección IDIOMA
+  ya no dice "La conversación inicia en español" ni usa regla de espejo —
+  delega en el `language` de la sesión ("el idioma lo decide la app, no la
+  conversación"); las reglas 1/5/8 ya NO ofrecen derivar a humano: la atención
+  es 100% asistida por CoppAI y se ofrece reintentar más tarde o agendar cita
+  (`suggest_appointment`). El dashboard conserva `language: es` y el
+  `first_message` en español SOLO como fallback estático (aplica si el request
+  llega sin `language`). El equivalente para los agentes de TEXTO sigue siendo
+  `build_turn_policy` en `app/agents/prompts.py`.
 
 ## Client tools (8, recreadas el 2026-10-01)
 
