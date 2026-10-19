@@ -203,6 +203,12 @@ Datos que guían UN turno pero **nunca se persisten** en el checkpointer:
   no-op `mark_control_declined` → el endpoint emite `control_signal: declined`
   (evento propio en el stream, campo en la respuesta completa). Sin contexto, no se
   emite nada.
+- `language` (idioma de la app, `'es' | 'en'`): el frontend del paciente lo envía en
+  cada request de chat (normalizado por `_normalize_language`); el nodo `agent` lo
+  convierte en instrucción explícita de idioma con `build_language_instruction` —
+  **gana sobre la regla de espejo del prompt y sobre el idioma del historial**,
+  habilitando cambiar de idioma a mitad de conversación. Ausente/null ⇒ espejo
+  estándar (el agente responde en el idioma del usuario).
 - Identidad: `user_id`, `patient_id`, `agent_instance_id` (leídos por los nodos de
   memoria para aislamiento).
 

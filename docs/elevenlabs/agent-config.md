@@ -62,6 +62,14 @@ humano, y emergencias → botón SOS de la app.
   `qwen35-397b-a17b` era inestable) + regla anti-babbling.
 - Espejo del agente de texto (CoppAI) en `ai-service/app/agents/prompts.py`
   y en el seeder backend (`AgentCatalogSeeder.cs`).
+- **Override por app (2026-10-19)**: el frontend (`VoiceOverlay.tsx`) envía
+  `overrides.agent.language` = idioma de la app (`'es' | 'en'`) al abrir la
+  sesión (`startSession`). El agente corre sobre `gemini-2.5-flash`
+  (multilingüe), así que el override SÍ aplica y GANA sobre la config `es` de
+  la plataforma y sobre la regla de espejo del prompt. El override se lee al
+  arrancar la sesión: un cambio de idioma a mitad de llamada toma efecto en
+  la siguiente sesión de voz (sin reconexión en caliente). Antes de esto, el
+  idioma quedaba clavado en español aunque la app estuviera en inglés.
 
 ## Client tools (8, recreadas el 2026-10-01)
 

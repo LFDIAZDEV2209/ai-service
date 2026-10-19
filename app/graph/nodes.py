@@ -13,7 +13,11 @@ from langgraph.config import get_config
 from langgraph.prebuilt import ToolNode
 from langgraph.types import Overwrite
 
-from app.agents.prompts import BASE_SYSTEM_PROMPT, build_control_guidance
+from app.agents.prompts import (
+    BASE_SYSTEM_PROMPT,
+    build_control_guidance,
+    build_language_instruction,
+)
 from app.agents.registry import AgentProfile
 from app.graph.state import AgentState
 from app.memory.adaptive import AdaptiveMemoryService
@@ -145,6 +149,15 @@ def make_agent_node(
                     exam_pending=control_context.get("exam_pending", True),
                 )
             )
+
+        # Idioma de la app del paciente (configurable['language']): señal
+        # EXPLÍCITA por turno que GANA sobre la regla de espejo del prompt y
+        # sobre el historial — habilita cambiar de idioma a mitad de
+        # conversación. Ausente ⇒ manda el prompt base (espejo del idioma del
+        # usuario, comportamiento byte-idéntico al estándar).
+        language = configurable.get("language")
+        if language:
+            system_blocks.append(build_language_instruction(language))
 
         prompt = [
             *[SystemMessage(content=block) for block in system_blocks],

@@ -143,3 +143,27 @@ def build_control_guidance(day: int, status: str, exam_pending: bool) -> str:
         else "El sistema puede re-ofrecerlo una vez más más adelante si hoy evade."
     )
     return "\n".join(line.format(day=day, reoffer=reoffer) for line in _CONTROL_GUIDANCE_LINES)
+
+
+def build_language_instruction(language: str) -> str:
+    """Construye el bloque de idioma para un turno (señal explícita de la app).
+
+    La app del paciente (antares-paciente) envía `language` ('es' | 'en') en
+    cada request de chat. Este bloque GANA sobre la regla de espejo del prompt
+    base y sobre el idioma del historial: permite cambiar de idioma a mitad de
+    conversación sin crear un thread nuevo. Se inyecta como mensaje de sistema
+    adicional en `make_agent_node` solo cuando la señal está presente.
+    """
+    if language == "en":
+        return (
+            "LANGUAGE (this turn and following turns): the patient's app language "
+            "is English. Reply in English even if earlier messages in this "
+            "conversation were in another language. Keep the same language until "
+            "the app signals otherwise. Never mix languages in one reply."
+        )
+    return (
+        "LANGUAGE (this turn and following turns): the patient's app language "
+        "is Spanish. Reply in Spanish even if earlier messages in this "
+        "conversation were in another language. Keep the same language until "
+        "the app signals otherwise. Never mix languages in one reply."
+    )

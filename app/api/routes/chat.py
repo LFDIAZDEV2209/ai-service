@@ -95,6 +95,17 @@ def _storage_thread_id(user_id: str | None, thread_id: str) -> str:
     return thread_id
 
 
+def _normalize_language(language: str | None) -> str | None:
+    """Normaliza el idioma de la app ('es' | 'en'); None/vacío/desconocido ⇒ None.
+
+    Mismo convenio que `lab_exam._normalize_language`, pero sin default a 'es':
+    aquí None significa "el frontend no pidió idioma" y el agente mantiene su
+    regla de espejo (comportamiento byte-idéntico al estándar).
+    """
+    value = (language or "").strip().lower()
+    return value if value in ("es", "en") else None
+
+
 def _build_config(
     thread_id: str,
     request: ChatRequest | None = None,
@@ -122,6 +133,10 @@ def _build_config(
         configurable["control_context"] = (
             request.control_context.model_dump() if request.control_context is not None else None
         )
+        # Idioma de la app del paciente: señal EXPLÍCITA por turno (permite
+        # cambiar de idioma a mitad de conversación). Viaja por `configurable`
+        # igual que control_context — nunca persiste en el checkpointer.
+        configurable["language"] = _normalize_language(request.language)
 
     return {
         "configurable": configurable,
@@ -430,9 +445,7 @@ async def chat_stream(
                         token_payload: dict[str, object] = {"type": "token", "content": text}
                         # Nodo que emite el token (el front marca el nodo activo).
                         node_name = (
-                            metadata.get("langgraph_node")
-                            if isinstance(metadata, dict)
-                            else None
+                            metadata.get("langgraph_node") if isinstance(metadata, dict) else None
                         )
                         if node_name:
                             token_payload["node"] = node_name

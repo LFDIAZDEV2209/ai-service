@@ -53,6 +53,14 @@ class ChatRequest(BaseModel):
             "comportamiento byte-idéntico al chat estándar (sin guía ni señal)."
         ),
     )
+    language: str | None = Field(
+        default=None,
+        description=(
+            "Idioma de la app del paciente ('es' | 'en'), enviado por el frontend "
+            "en cada turno. Ausente o null ⇒ el agente mantiene el espejo del "
+            "idioma del usuario (comportamiento byte-idéntico al estándar)."
+        ),
+    )
 
 
 class ChatSuggestion(BaseModel):
