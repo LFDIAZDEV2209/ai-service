@@ -162,3 +162,114 @@ def test_voice_session_elevenlabs_server_error(monkeypatch):
         assert res.status_code == 502
     finally:
         get_settings.cache_clear()
+
+
+# --- Idioma de la app: PATCH server-side del agente antes del signed URL -----
+
+
+def test_voice_session_with_language_patches_agent_first(monkeypatch):
+    """Con `language` presente: PATCH de idioma/first_message ANTES del GET.
+
+    Con sesiones por signed URL los overrides del cliente no aplican: el
+    idioma de la voz se resuelve server-side (elección: 1 agente mutado por
+    sesión, fail-open).
+    """
+    _apply_voice_env(monkeypatch, enabled="true")
+    calls: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.method, request.url.path))
+        if request.method == "PATCH":
+            return httpx.Response(200, json={})
+        return httpx.Response(
+            200,
+            json={"signed_url": "wss://elevenlabs.test/signed", "conversation_id": "c-1"},
+        )
+
+    _mock_elevenlabs(monkeypatch, handler)
+    get_settings.cache_clear()
+    try:
+        app = create_app()
+        with TestClient(app) as tc:
+            res = tc.post(URL, json={"user_id": "u-1", "language": "en"}, headers=HEADERS)
+        assert res.status_code == 200
+
+        # Orden: PATCH primero, GET después; el body se valida en
+        # test_voice_session_patch_body.
+        assert calls[0][0] == "PATCH" and calls[1][0] == "GET"
+        assert calls[0][1].endswith("/v1/convai/agents/agent_test")
+    finally:
+        get_settings.cache_clear()
+
+
+def test_voice_session_patch_body_shape(monkeypatch):
+    """El PATCH lleva conversation_config.agent.{language, first_message}."""
+    _apply_voice_env(monkeypatch, enabled="true")
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "PATCH":
+            import json as _json
+
+            seen["path"] = str(request.url.path)
+            seen["body"] = _json.loads(request.content.decode())
+            return httpx.Response(200, json={})
+        return httpx.Response(200, json={"signed_url": "wss://x", "conversation_id": None})
+
+    _mock_elevenlabs(monkeypatch, handler)
+    get_settings.cache_clear()
+    try:
+        app = create_app()
+        with TestClient(app) as tc:
+            res = tc.post(URL, json={"user_id": "u-1", "language": "en"}, headers=HEADERS)
+        assert res.status_code == 200
+        agent = seen["body"]["conversation_config"]["agent"]
+        assert seen["path"].endswith("/v1/convai/agents/agent_test")
+        assert agent["language"] == "en"
+        assert agent["first_message"].startswith("Hi, I'm the Copp Adresd assistant")
+    finally:
+        get_settings.cache_clear()
+
+
+def test_voice_session_without_language_skips_patch(monkeypatch):
+    """Sin `language` (o valor desconocido): sin PATCH, comportamiento histórico."""
+    _apply_voice_env(monkeypatch, enabled="true")
+    methods: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        methods.append(request.method)
+        return httpx.Response(200, json={"signed_url": "wss://x", "conversation_id": None})
+
+    _mock_elevenlabs(monkeypatch, handler)
+    get_settings.cache_clear()
+    try:
+        app = create_app()
+        with TestClient(app) as tc:
+            res = tc.post(URL, json={"user_id": "u-1"}, headers=HEADERS)
+            assert res.status_code == 200
+            res = tc.post(URL, json={"user_id": "u-1", "language": "fr"}, headers=HEADERS)
+            assert res.status_code == 200
+        assert methods == ["GET", "GET"]
+    finally:
+        get_settings.cache_clear()
+
+
+def test_voice_session_patch_failure_is_fail_open(monkeypatch):
+    """PATCH rechazado (500) NO rompe la sesión: se emite el signed URL igual."""
+    _apply_voice_env(monkeypatch, enabled="true")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "PATCH":
+            return httpx.Response(500, text="boom")
+        return httpx.Response(200, json={"signed_url": "wss://x", "conversation_id": None})
+
+    _mock_elevenlabs(monkeypatch, handler)
+    get_settings.cache_clear()
+    try:
+        app = create_app()
+        with TestClient(app) as tc:
+            res = tc.post(URL, json={"user_id": "u-1", "language": "en"}, headers=HEADERS)
+        assert res.status_code == 200
+        assert res.json()["signed_url"] == "wss://x"
+    finally:
+        get_settings.cache_clear()

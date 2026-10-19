@@ -12,8 +12,14 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.security import require_internal_key
 from app.core.config import get_settings
-from app.voice.client import VoiceSessionError, create_signed_url
+from app.voice.client import VoiceSessionError, create_signed_url, set_agent_language
 from app.voice.schemas import VoiceSessionRequest, VoiceSessionResponse
+
+
+def _normalize_voice_language(language: str | None) -> str | None:
+    """Normaliza el idioma de la app: solo 'en'/'es' son válidos; resto ⇒ None."""
+    normalized = (language or "").strip().lower()
+    return normalized if normalized in ("en", "es") else None
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +48,13 @@ async def create_voice_session(payload: VoiceSessionRequest) -> VoiceSessionResp
             status_code=503,
             detail="Configuración de voz incompleta (ELEVENLABS_API_KEY / ELEVENLABS_AGENT_ID).",
         )
+
+    # Idioma de la app (si vino): dejar el agente hablando ese idioma ANTES
+    # de emitir el signed URL (los overrides del cliente no aplican con
+    # signed URL). Fail-open: un fallo del PATCH no rompe la sesión.
+    language = _normalize_voice_language(payload.language)
+    if language:
+        await set_agent_language(settings, settings.elevenlabs_agent_id, language)
 
     try:
         session = await create_signed_url(settings, settings.elevenlabs_agent_id)

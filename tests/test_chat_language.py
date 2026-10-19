@@ -147,3 +147,36 @@ def test_language_switch_mid_thread(recording_client):
         isinstance(m, SystemMessage) and m.content == build_language_instruction("es")
         for m in second
     )
+
+
+# --- (c) Política de turno: sin derivación a humanos, en el idioma vigente ---
+
+
+def test_turn_policy_injected_with_language(recording_client):
+    """Con señal de idioma, la política anti-humano viaja en ese idioma."""
+    from app.agents.prompts import build_turn_policy
+
+    client, fake = recording_client
+    res = client.post("/api/v1/chat", json={"message": "hola", "language": "en"}, headers=HEADERS)
+    assert res.status_code == 200
+    prompt = fake.prompts[0]
+    policy = build_turn_policy("en")
+    assert any(isinstance(m, SystemMessage) and m.content == policy for m in prompt)
+    # La política refuerza el bloque de idioma (ambos presentes).
+    assert any(
+        isinstance(m, SystemMessage) and m.content == build_language_instruction("en")
+        for m in prompt
+    )
+
+
+def test_turn_policy_absent_without_language(recording_client):
+    """Sin señal de idioma: sin bloque de política (prompt byte-idéntico)."""
+    from app.agents.prompts import build_turn_policy
+
+    client, fake = recording_client
+    res = client.post("/api/v1/chat", json={"message": "hola"}, headers=HEADERS)
+    assert res.status_code == 200
+    assert not any(
+        isinstance(m, SystemMessage) and m.content == build_turn_policy("es")
+        for m in fake.prompts[0]
+    )

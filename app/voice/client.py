@@ -18,6 +18,19 @@ logger = logging.getLogger(__name__)
 
 # Endpoint oficial vigente (docs/api-reference/conversations/get-signed-url).
 _GET_SIGNED_URL_PATH = "/v1/convai/conversation/get-signed-url"
+# PATCH de agente (docs/api-reference/agents/update-agent): actualiza la
+# configuración server-side del agente (idioma/first_message) ANTES de emitir
+# el signed URL — con sesiones por signed URL los overrides del cliente NO
+# aplican, así que el idioma de la voz se resuelve aquí.
+_UPDATE_AGENT_PATH = "/v1/convai/agents/{agent_id}"
+
+# Saludo inicial localizado por idioma (conversation_config.agent.first_message).
+_FIRST_MESSAGES = {
+    "es": "Hola, soy el asistente de Copp Adresd. ¿Cómo te puedo ayudar con "
+    "tus citas o tu atención de hoy?",
+    "en": "Hi, I'm the Copp Adresd assistant. How can I help you with your "
+    "appointments or care today?",
+}
 
 
 class VoiceSessionError(Exception):
@@ -110,3 +123,66 @@ async def create_signed_url(
     # Nunca loguear el signed_url (es la credencial temporal del paciente).
     logger.info("Voice session: signed URL emitido (agent_id=%s)", agent_id)
     return {"signed_url": signed_url, "conversation_id": body.get("conversation_id")}
+
+
+async def set_agent_language(settings: Settings, agent_id: str, language: str) -> None:
+    """Deja el agente de voz hablando el idioma de la app para la próxima sesión.
+
+    PATCH parcial de `conversation_config.agent` (idioma + saludo inicial en
+    ese idioma) contra ElevenLabs ANTES de emitir el signed URL: con sesiones
+    por signed URL los overrides del cliente no aplican, así que el idioma de
+    la voz se resuelve server-side.
+
+    Elección de diseño (decidida con el usuario): UN agente mutado por
+    sesión — simple, sin duplicar agentes en el dashboard; a cambio, dos
+    sesiones concurrentes en idiomas distintos pueden competir por la config
+    (carrera benigna: la sesión lee la config al conectar).
+
+    Args:
+        settings: configuración del servicio (key, base url, timeout).
+        agent_id: agente ElevenLabs de destino.
+        language: idioma normalizado ('es' | 'en'); otro valor no cambia nada.
+
+    Fail-open: un fallo del PATCH NUNCA rompe la sesión de voz — se loguea y
+    la sesión continúa con el idioma vigente del agente (degradación igual a
+    la conducta histórica).
+    """
+    if language not in _FIRST_MESSAGES or not settings.elevenlabs_api_key:
+        return
+
+    base = settings.elevenlabs_base_url.rstrip("/")
+    url = f"{base}{_UPDATE_AGENT_PATH.format(agent_id=agent_id)}"
+    payload = {
+        "conversation_config": {
+            "agent": {
+                "language": language,
+                "first_message": _FIRST_MESSAGES[language],
+            }
+        }
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=settings.elevenlabs_timeout) as client:
+            resp = await client.patch(
+                url,
+                json=payload,
+                headers={"xi-api-key": settings.elevenlabs_api_key},
+            )
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "Voice session: fallo de red PATCH idioma agente (%s); la sesión "
+            "continúa con el idioma vigente",
+            type(exc).__name__,
+        )
+        return
+
+    if resp.status_code >= 400:
+        # Nunca incluir el body de respuesta (podría reflejar la key).
+        logger.warning(
+            "Voice session: PATCH idioma agente rechazado (status=%s); la "
+            "sesión continúa con el idioma vigente",
+            resp.status_code,
+        )
+        return
+
+    logger.info("Voice session: agente configurado en idioma=%s", language)

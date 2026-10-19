@@ -17,6 +17,7 @@ from app.agents.prompts import (
     BASE_SYSTEM_PROMPT,
     build_control_guidance,
     build_language_instruction,
+    build_turn_policy,
 )
 from app.agents.registry import AgentProfile
 from app.graph.state import AgentState
@@ -158,6 +159,11 @@ def make_agent_node(
         language = configurable.get("language")
         if language:
             system_blocks.append(build_language_instruction(language))
+            # Política de servicio en el idioma vigente: sin derivación a
+            # humanos (cubre agentes especializados y sincronizados de BD que
+            # no traen la regla 9 del prompt base) — evita que la oferta de
+            # un agente humano rompa la consistencia de idioma.
+            system_blocks.append(build_turn_policy(language))
 
         prompt = [
             *[SystemMessage(content=block) for block in system_blocks],
