@@ -17,6 +17,11 @@ class VoiceSessionRequest(BaseModel):
     # Hilo del asistente de chat (`proactive-<id>`) para correlacionar la
     # conversación de voz con la sesión de chat del paciente.
     thread_id: str | None = None
+    # Idioma de la app ('es' | 'en'): el agente de voz se deja hablando ese
+    # idioma ANTES de emitir el signed URL (con sesiones por signed URL los
+    # overrides del cliente no aplican). Ausente/desconocido ⇒ sin PATCH
+    # (el agente usa su idioma configurado, comportamiento histórico).
+    language: str | None = None
 
 
 class VoiceSessionResponse(BaseModel):

@@ -62,14 +62,29 @@ humano, y emergencias → botón SOS de la app.
   `qwen35-397b-a17b` era inestable) + regla anti-babbling.
 - Espejo del agente de texto (CoppAI) en `ai-service/app/agents/prompts.py`
   y en el seeder backend (`AgentCatalogSeeder.cs`).
-- **Override por app (2026-10-19)**: el frontend (`VoiceOverlay.tsx`) envía
-  `overrides.agent.language` = idioma de la app (`'es' | 'en'`) al abrir la
-  sesión (`startSession`). El agente corre sobre `gemini-2.5-flash`
-  (multilingüe), así que el override SÍ aplica y GANA sobre la config `es` de
-  la plataforma y sobre la regla de espejo del prompt. El override se lee al
-  arrancar la sesión: un cambio de idioma a mitad de llamada toma efecto en
-  la siguiente sesión de voz (sin reconexión en caliente). Antes de esto, el
-  idioma quedaba clavado en español aunque la app estuviera en inglés.
+- **PATCH server-side por sesión (2026-10-19, reemplaza el override del
+  cliente)**: con sesiones por signed URL los overrides del cliente NO
+  aplican de forma fiable (commit `8a7b746` en antares-paciente quitó
+  `overrides.agent.language` del `startSession` por eso). Mecanismo actual:
+  la app envía `language` ('es' | 'en') en el request de voz
+  (`POST /api/v1/chat/voice/session`) → backend lo propaga
+  (`VoiceSessionInternalRequest.language`) → el AI Service hace
+  `PATCH /v1/convai/agents/{agent_id}` con
+  `conversation_config.agent.{language, first_message}` ANTES de emitir el
+  signed URL (`set_agent_language` en `app/voice/client.py`; saludo
+  localizado es/en). Fail-open: un fallo del PATCH no rompe la sesión (el
+  agente sigue con su config del dashboard). Elección de diseño: UN agente
+  mutado por sesión — dos sesiones concurrentes en idiomas distintos pueden
+  competir por la config (carrera benigna: la sesión lee la config al
+  conectar). Un cambio de idioma a mitad de llamada de voz toma efecto en
+  la siguiente sesión.
+- **PENDIENTE manual (dashboard)**: en el system prompt del agente, la
+  sección de 'derivación a humano' hay que reemplazarla por la regla sin
+  canal humano (la atención es 100% asistida por CoppAI; nunca ofrecer
+  humano; ofrecer agendar cita con `suggest_appointment`; hablar siempre el
+  idioma configurado). Mientras no se edite, el agente de VOZ puede seguir
+  ofreciendo humanos — el bloque equivalente ya cubre a los agentes de
+  TEXTO (`build_turn_policy` en `app/agents/prompts.py`).
 
 ## Client tools (8, recreadas el 2026-10-01)
 

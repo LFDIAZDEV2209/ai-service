@@ -174,3 +174,35 @@ def build_language_instruction(language: str) -> str:
         "conversation were in another language. Keep the same language until "
         "the app signals otherwise. Never mix languages in one reply."
     )
+
+
+def build_turn_policy(language: str) -> str:
+    """Construye el bloque de política de turno (sin derivación a humanos).
+
+    La plataforma NO tiene canal humano: la atención es 100% asistida por
+    CoppAI. Los prompts especializados y los agentes sincronizados de la BD
+    no siempre traen la regla 9 del prompt base, así que se inyecta por turno
+    en el idioma vigente junto al bloque de idioma (misma señal `language`
+    de la app). Se aplica en `make_agent_node` cuando la señal está presente.
+    """
+    if language == "en":
+        return (
+            "SERVICE POLICY (this turn and following turns): care is 100% "
+            "CoppAI-assisted. NEVER offer, promise or suggest transferring the "
+            "conversation to a 'human agent', 'human assistant', 'advisor', "
+            "'human support' or anything similar: that channel does NOT exist "
+            "on the platform and you are the only assistant. If the patient "
+            "asks to talk to a person, warmly clarify that all care is handled "
+            "by CoppAI and offer to schedule an appointment with a healthcare "
+            "professional using the app (suggest_appointment tool)."
+        )
+    return (
+        "POLÍTICA DE SERVICIO (este turno y los siguientes): la atención es 100% "
+        "asistida por CoppAI. NUNCA ofrezcas, prometas ni sugieras transferir la "
+        "conversación a un 'asistente humano', 'agente humano', 'asesor', "
+        "'soporte humano' o similar: ese canal NO existe en la plataforma y tú "
+        "eres el único asistente. Si el paciente pide hablar con una persona, "
+        "aclara con calidez que la atención es 100% asistida por CoppAI y "
+        "ofrécele agendar una cita con un profesional de la salud usando la app "
+        "(herramienta suggest_appointment)."
+    )

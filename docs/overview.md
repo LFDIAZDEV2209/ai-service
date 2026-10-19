@@ -208,7 +208,12 @@ Datos que guían UN turno pero **nunca se persisten** en el checkpointer:
   convierte en instrucción explícita de idioma con `build_language_instruction` —
   **gana sobre la regla de espejo del prompt y sobre el idioma del historial**,
   habilitando cambiar de idioma a mitad de conversación. Ausente/null ⇒ espejo
-  estándar (el agente responde en el idioma del usuario).
+  estándar (el agente responde en el idioma del usuario). Con señal presente también
+  viaja `build_turn_policy(language)`: bloque anti-derivación-a-humanos en el idioma
+  vigente (los agentes especializados y sincronizados de BD no siempre traen la regla
+  9 del prompt base). En voz el idioma se resuelve server-side con
+  `set_agent_language` (PATCH del agente antes del signed URL; ver
+  `docs/elevenlabs/agent-config.md`).
 - Identidad: `user_id`, `patient_id`, `agent_instance_id` (leídos por los nodos de
   memoria para aislamiento).
 
