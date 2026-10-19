@@ -56,6 +56,10 @@ async def create_signed_url(
             # Conversación one-shot: el conversation_id queda reservado para
             # esta sesión (trazabilidad); el signed URL no es reutilizable.
             "include_conversation_id": "true",
+            # Permite que el cliente envíe conversation_initiation_client_data
+            # (overrides.agent.language: idioma de la app 'es' | 'en'). Sin este
+            # flag ElevenLabs CIERRA la conexión si el cliente manda overrides.
+            "enable_conversation_config_override": "true",
         }
     )
     url = f"{settings.elevenlabs_base_url.rstrip('/')}{_GET_SIGNED_URL_PATH}?{query}"
