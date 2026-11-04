@@ -15,6 +15,7 @@ from langgraph.types import Overwrite
 
 from app.agents.prompts import (
     BASE_SYSTEM_PROMPT,
+    PRACTICAL_SYMPTOM_GUIDANCE,
     build_control_guidance,
     build_language_instruction,
     build_turn_policy,
@@ -156,6 +157,9 @@ def make_agent_node(
         # sobre el historial — habilita cambiar de idioma a mitad de
         # conversación. Ausente ⇒ manda el prompt base (espejo del idioma del
         # usuario, comportamiento byte-idéntico al estándar).
+        # También cubre perfiles sincronizados del ERP con prompts antiguos;
+        # la orientación de síntomas no depende de reactivar cada versión.
+        system_blocks.append(PRACTICAL_SYMPTOM_GUIDANCE)
         language = configurable.get("language")
         if language:
             system_blocks.append(build_language_instruction(language))
