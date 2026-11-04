@@ -16,6 +16,7 @@ from app.api.routes import (
     internal,
     lab_exam,
     proactive,
+    program_narrative,
     threads,
     voice,
 )
@@ -76,5 +77,6 @@ def create_app() -> FastAPI:
     app.include_router(proactive.router)
     app.include_router(lab_exam.router)
     app.include_router(voice.router)
+    app.include_router(program_narrative.router)
 
     return app
