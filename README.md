@@ -1,6 +1,15 @@
 # CoppAddresd AI Service
 
 Agente de IA escalable para **CoppAddresd**, construido con **LangGraph** + **FastAPI**.
+
+La generación nutricional interna acepta `clinical_context.assessments`: últimos
+resultados persistidos de baterías (`code`, `label`, `value`, `qualifier`,
+`severity`, `observed_at`), sin identidad ni respuestas abiertas del paciente.
+El prompt pide un ciclo de 30 días con menú semanal completo y merienda; el
+backend guarda el borrador y exige revisión nutricional antes de publicarlo.
+Los resultados ausentes se declaran ausentes y no se inventan diagnósticos.
+Pruebas sin proveedor real: `uv run python -m pytest tests/test_plan_generation.py`.
+
 Servicio hermano de `coppAddresdBack` (.NET) — juntos formarán la plataforma
 para clientes y profesionales (doctor, psicólogo, etc.) con documentación RAG,
 conocimiento de la base de datos de la API y captura de datos hacia un futuro CRM.

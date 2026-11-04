@@ -20,7 +20,9 @@ from app.rag.extract import DocumentExtractionError
 from app.rag.ingest import DocumentIngestResult, ingest_document_bytes
 from app.rag.pgvector_store import PgVectorStore
 from app.schemas.agent_graph import AgentGraphResponse
+from app.schemas.assessment_analysis import AssessmentAnalysisRequest, AssessmentAnalysisResponse
 from app.schemas.plan_generation import PlanGenerationRequest, PlanGenerationResponse
+from app.services.assessment_analysis import analyze_assessments
 from app.services.plan_generation import (
     PlanGenerationService,
     get_plan_generation_service,
@@ -33,6 +35,14 @@ router = APIRouter(
     tags=["internal"],
     dependencies=[Depends(require_internal_key)],
 )
+
+
+@router.post("/assessments/analyze", response_model=AssessmentAnalysisResponse)
+async def assessment_profile_analysis(
+    payload: AssessmentAnalysisRequest,
+) -> AssessmentAnalysisResponse:
+    """Recibe resultados acotados sin identificadores; el backend deriva la identidad."""
+    return await analyze_assessments(payload)
 
 
 class AgentConfigSyncRequest(BaseModel):

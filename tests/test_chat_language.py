@@ -19,7 +19,11 @@ from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 
-from app.agents.prompts import BASE_SYSTEM_PROMPT, build_language_instruction
+from app.agents.prompts import (
+    BASE_SYSTEM_PROMPT,
+    PRACTICAL_SYMPTOM_GUIDANCE,
+    build_language_instruction,
+)
 from app.api.deps import get_db_session, get_graph
 from app.api.main import create_app
 from app.api.routes.chat import _normalize_language, _rate_limiters
@@ -61,17 +65,18 @@ def recording_client():
 # --- (a) Regresión: sin language, comportamiento byte-idéntico ----------------
 
 
-def test_absent_language_prompt_identical_to_baseline(recording_client):
+def test_absent_language_keeps_default_language_and_symptom_guidance(recording_client):
     client, fake = recording_client
     res = client.post("/api/v1/chat", json={"message": "hola"}, headers=HEADERS)
     assert res.status_code == 200
     assert res.json()["answer"] == FAKE_ANSWER
 
-    # Prompt byte-idéntico al estándar: solo el sistema base + el humano.
+    # Sin señal de idioma: sistema base, guía de síntomas y mensaje humano.
     assert len(fake.prompts) == 1
     prompt = fake.prompts[0]
-    assert [type(m).__name__ for m in prompt] == ["SystemMessage", "HumanMessage"]
+    assert [type(m).__name__ for m in prompt] == ["SystemMessage", "SystemMessage", "HumanMessage"]
     assert prompt[0].content == BASE_SYSTEM_PROMPT
+    assert prompt[1].content == PRACTICAL_SYMPTOM_GUIDANCE
     assert prompt[-1].content == "hola"
 
 
@@ -83,6 +88,7 @@ def test_unknown_language_is_ignored(recording_client, raw):
     assert res.status_code == 200
     assert len(fake.prompts) == 1
     assert [type(m).__name__ for m in fake.prompts[0]] == [
+        "SystemMessage",
         "SystemMessage",
         "HumanMessage",
     ]

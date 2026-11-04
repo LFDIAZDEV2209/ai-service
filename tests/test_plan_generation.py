@@ -20,6 +20,7 @@ from app.schemas.plan_generation import (
     PlanGenerationResponse,
 )
 from app.services.plan_generation import (
+    _build_prompt,
     _extract_json,
     generate_plan,
     get_plan_generation_service,
@@ -278,3 +279,25 @@ def test_plan_endpoint_returns_validated_plan(client):
     assert body["type"] == "nutrition"
     assert body["plan"]["name"] == "Plan personalizado María"
     assert body["plan"]["days"][0]["day_number"] == 1
+
+
+def test_battery_results_are_available_to_the_plan_prompt():
+    body = request_body()
+    body["clinical_context"]["assessments"] = [{
+        "code": "nutrition_habits", "label": "Hábitos alimentarios", "value": 42,
+        "qualifier": "Requiere seguimiento", "severity": "medium",
+        "observed_at": "2026-11-03T10:00:00Z",
+    }]
+    request = PlanGenerationRequest.model_validate(body)
+    prompt = _build_prompt(request)
+    assert "nutrition_habits" in prompt
+    assert "Requiere seguimiento" in prompt
+    assert "duration_days=30" in prompt
+    assert "Merienda" in prompt
+    assert "aprobación de un nutricionista" in prompt
+
+
+def test_missing_battery_results_do_not_invent_a_profile():
+    prompt = _build_prompt(PlanGenerationRequest.model_validate(request_body()))
+    assert "Sin resultados de baterías disponibles" in prompt
+    assert "No inventes resultados ni diagnósticos" in prompt
