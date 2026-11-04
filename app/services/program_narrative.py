@@ -3,6 +3,7 @@
 import re
 from pathlib import Path
 
+from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import ValidationError
@@ -25,7 +26,13 @@ def _truncate_narrative(text: str) -> str:
 
 def get_program_narrative_model() -> BaseChatModel:
     """Reutiliza la configuración del servicio; permite sustitución en tests."""
-    return get_chat_model(temperature=0.0, max_tokens=2048)
+    model = get_chat_model(temperature=0.0, max_tokens=2048)
+    # El proveedor desplegado rechaza parámetros de muestreo en esta petición.
+    # None hace que LangChain omita temperature del payload de Anthropic.
+    # Se copia solo el modelo de narrativa: los agentes de chat no cambian.
+    if isinstance(model, ChatAnthropic):
+        return model.model_copy(update={"temperature": None})
+    return model
 
 
 async def generate_program_narrative(

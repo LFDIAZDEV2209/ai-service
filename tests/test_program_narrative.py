@@ -6,13 +6,16 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import HumanMessage
+from langchain_openai import ChatOpenAI
 from pydantic import ValidationError
 
 from app.api.main import create_app
 from app.api.routes.program_narrative import get_narrative_model
 from app.core.config import get_settings
 from app.schemas.program_narrative import ProgramNarrativeRequest, ProgramNarratives
-from app.services.program_narrative import generate_program_narrative
+from app.services.program_narrative import generate_program_narrative, get_program_narrative_model
 
 URL = "/internal/program/assignment-narrative"
 HEADERS = {"X-Internal-Key": get_settings().internal_api_key}
@@ -31,6 +34,23 @@ PAYLOAD = {
     "source_refs": [SOURCE],
 }
 OUTPUT = {"es": f"Justificación de la propuesta [{SOURCE}].", "en": f"Rationale [{SOURCE}]."}
+
+
+def test_anthropic_narrative_omits_temperature_from_wire_payload(monkeypatch):
+    original = ChatAnthropic(model="claude-sonnet-4-6", api_key="test-not-real", temperature=0.0)
+    monkeypatch.setattr("app.services.program_narrative.get_chat_model", lambda **_: original)
+    model = get_program_narrative_model()
+    payload = model._get_request_payload([HumanMessage(content="Escenario sintético de QA")])
+    assert "temperature" not in payload
+    assert original.temperature == 0.0
+    assert model is not original
+
+
+def test_openai_narrative_keeps_existing_temperature(monkeypatch):
+    original = ChatOpenAI(model="gpt-4.1", api_key="test-not-real", temperature=0.0)
+    monkeypatch.setattr("app.services.program_narrative.get_chat_model", lambda **_: original)
+    assert get_program_narrative_model() is original
+    assert original.temperature == 0.0
 
 
 @pytest.fixture
