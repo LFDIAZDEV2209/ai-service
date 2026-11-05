@@ -16,7 +16,7 @@ class PatientIn(BaseModel):
     """Datos básicos del paciente."""
 
     age: int = Field(ge=0, le=130, description="Edad en años")
-    gender: str = Field(min_length=1, description="Género reportado (M/F/otro)")
+    gender: str | None = Field(default=None, description="Género reportado, si existe")
     exercise_level: str = Field(default="", description="Nivel de ejercicio reportado")
 
 
@@ -37,6 +37,17 @@ class LifestyleIn(BaseModel):
     exercise_level: str = Field(default="", description="Nivel de ejercicio")
 
 
+class AssessmentIn(BaseModel):
+    """Resultado persistido de batería; no incluye identidad ni texto libre del paciente."""
+
+    code: str = Field(min_length=1, max_length=200)
+    label: str | None = Field(default=None, max_length=500)
+    value: float | None = None
+    qualifier: str | None = Field(default=None, max_length=500)
+    severity: str | None = Field(default=None, max_length=50)
+    observed_at: datetime
+
+
 class ClinicalContextIn(BaseModel):
     """Contexto clínico completo que el LLM usa como base del plan."""
 
@@ -46,6 +57,7 @@ class ClinicalContextIn(BaseModel):
     diagnoses: list[str] = Field(default_factory=list)
     medications: list[str] = Field(default_factory=list)
     lifestyle: LifestyleIn = Field(default_factory=LifestyleIn)
+    assessments: list[AssessmentIn] = Field(default_factory=list, max_length=250)
 
 
 class RestrictionIn(BaseModel):

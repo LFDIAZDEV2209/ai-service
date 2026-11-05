@@ -20,7 +20,11 @@ from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 
-from app.agents.prompts import BASE_SYSTEM_PROMPT, build_control_guidance
+from app.agents.prompts import (
+    BASE_SYSTEM_PROMPT,
+    PRACTICAL_SYMPTOM_GUIDANCE,
+    build_control_guidance,
+)
 from app.api.deps import get_db_session, get_graph
 from app.api.main import create_app
 from app.api.routes.chat import _rate_limiters
@@ -141,11 +145,12 @@ def test_absent_context_prompt_and_payload_identical_to_baseline(recording_clien
     assert body["agent"] == "base"
     assert body.get("control_signal") is None
 
-    # Prompt byte-idéntico al actual: solo el sistema base + el humano.
+    # Sin contexto de control: base y guía general, sin bloque de control.
     assert len(fake.prompts) == 1
     prompt = fake.prompts[0]
-    assert [type(m).__name__ for m in prompt] == ["SystemMessage", "HumanMessage"]
+    assert [type(m).__name__ for m in prompt] == ["SystemMessage", "SystemMessage", "HumanMessage"]
     assert prompt[0].content == BASE_SYSTEM_PROMPT
+    assert prompt[1].content == PRACTICAL_SYMPTOM_GUIDANCE
     assert prompt[-1].content == "hola"
 
 
