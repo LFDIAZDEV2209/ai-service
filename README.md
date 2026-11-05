@@ -163,3 +163,18 @@ Endpoints internos (backend → AI Service, `X-Internal-Key`): `POST /internal/a
 5. ✅ **Observabilidad**: `agent_executions` (tokens/latencia/fuentes/tools) + endpoints admin.
 6. ⏳ **Frontend admin**: módulo de agentes + playground.
 7. ⏳ **Hardening**: rate limit por usuario, redacción de PII, auditoría.
+# Propuesta nutricional interna (Ola 2)
+
+`POST /internal/nutrition/plan-draft` exige `X-Internal-Key`. Recibe metas calculadas,
+IDs del catálogo y 4–16 menús deterministas con claves `des|alm|mer|cen:0..3`.
+Devuelve narrativa e indicaciones ES/EN, menús estructurados y `source` (`llm` o
+`deterministic_fallback`). No recibe identidad ni actor del paciente. El backend
+expande la rotación a 30 días y revalida macros y porciones con su motor.
+
+El esquema rechaza campos extra, claves duplicadas, alimentos ajenos y cantidades
+no finitas/no positivas. Anthropic reutiliza la fábrica existente, omite
+temperature y dispone de 45 s; error, JSON inválido o configuración ausente
+devuelven explícitamente el menú determinista recibido, sin inventar datos
+clínicos ni afirmar aprobación. La cancelación se propaga. Verificación:
+`uv run pytest tests/test_nutrition_draft.py tests/test_program_narrative.py -q`.
+
