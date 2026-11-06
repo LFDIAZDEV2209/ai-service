@@ -16,6 +16,7 @@ from app.api.routes import (
     ingest,
     internal,
     lab_exam,
+    nutrition_draft,
     proactive,
     program_narrative,
     threads,
@@ -80,5 +81,6 @@ def create_app() -> FastAPI:
     app.include_router(voice.router)
     app.include_router(program_narrative.router)
     app.include_router(content_translation.router)
+    app.include_router(nutrition_draft.router)
 
     return app
