@@ -63,6 +63,9 @@ async def generate_nutrition_draft(
                             "clínicos ni modifiques metas. "
                             "Los menús serán revalidados por el motor. "
                             "Nunca afirmes que el plan ya fue revisado o aprobado."
+                            " El perfil medido y las reglas aplicadas explican la propuesta; "
+                            "respeta su procedencia y faltantes. No deduzcas glicemia ni grasa "
+                            "desde IMC/HbA1c ni conviertas una ausencia en un valor normal."
                         )
                     ),
                     HumanMessage(content=payload.model_dump_json()),

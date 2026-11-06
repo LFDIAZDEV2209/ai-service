@@ -1,8 +1,9 @@
 """Contrato acotado: el backend calcula nutrientes y entrega menús deterministas."""
 
+from datetime import datetime
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, StrictStr, model_validator
 
 
 class StrictModel(BaseModel):
@@ -34,10 +35,40 @@ class NutritionDraftTargets(StrictModel):
     water_ml: int = Field(gt=0, le=10000)
 
 
+class NutritionMeasuredField(StrictModel):
+    """Solo valores necesarios para redactar; no identidad del paciente ni respuestas abiertas."""
+
+    value: FiniteFloat | StrictStr | None
+    unit: str | None = Field(default=None, max_length=30)
+    source: Literal[
+        "health_test_response", "health_test_result", "clinical_measurements",
+        "clinical_context", "patient_profile", "derived_from_birth_date",
+        "derived_from_weight_height", "manual_or_preserved", "missing",
+    ]
+    source_code: str | None = Field(default=None, max_length=200)
+    observed_at: datetime | None = None
+
+
+class NutritionAppliedRule(StrictModel):
+    code: str = Field(min_length=1, max_length=80)
+    severity: Literal["crit", "warn", "info"]
+    message: str = Field(min_length=1, max_length=4000)
+    technical: bool
+
+
+class NutritionClinicalProfile(StrictModel):
+    engine_version: str = Field(min_length=1, max_length=80)
+    fields: dict[str, NutritionMeasuredField] = Field(max_length=40)
+    applied_rules: list[NutritionAppliedRule] = Field(max_length=100)
+    missing_data: list[str] = Field(max_length=40)
+
+
 class NutritionDraftRequest(StrictModel):
     targets: NutritionDraftTargets
     catalog_ids: list[str] = Field(min_length=1, max_length=200)
     menus: list[NutritionDraftMenu] = Field(min_length=4, max_length=16)
+    # Campo opcional: los clientes anteriores conservan el contrato y el fallback.
+    clinical_profile: NutritionClinicalProfile | None = None
 
     @model_validator(mode="after")
     def validate_catalog_and_keys(self) -> Self:

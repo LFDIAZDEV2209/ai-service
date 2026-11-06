@@ -19,6 +19,25 @@ Configuración idéntica en ambos. El agente prod se activará cuando el secret
 de producción (`cooppadresd/ai`, clave `ELEVENLABS_AGENT_ID`) apunte a él —
 nunca reutilizar el dev en prod (regla de `07-deployment.md`).
 
+## Voz más humana (2026-11-06) — APLICADO a dev y prod vía MCP
+
+Feedback del owner: la voz sonaba robótica. Versiones nuevas publicadas en
+ambos agentes (dev `agtvrsn_4101m6rqw7gqfaa8crjtrkc1d07b`, prod `agtvrsn_9101m6rqxxvpeaqs1bq5384k3416`):
+
+- **TTS `eleven_flash_v2_5` → `eleven_v4_turbo`** (default actual de la
+  plataforma para agentes; mucho más natural que flash, latencia aún apta para
+  conversación en vivo). El flash era la exigencia de la plataforma de
+  sept-2025 para agentes no-ingleses — vigente ya NO aplica.
+- **`stability 0.5 → 0.35`** (más variación expresiva = menos tono recitado).
+- `speed 1.0`, `similarity_boost 0.8`, voz, formato `pcm_16000` y ASR: sin cambios.
+- **Prompt, regla 6** (parche parcial de `prompt.prompt`; LLM/tools intactos):
+  añadida la cláusula de naturalidad "Suena a humano, no a sistema: palabras
+  del día a día, calidez genuina y ritmo pausado; cuando des un dato
+  (profesional, día, hora), intégralo dentro de una frase en lugar de
+  recitarlo como una lista." Regla anti-babbling conservada.
+- **Rollback**: reponer `model_id eleven_flash_v2_5`, `stability 0.5`, y la
+  regla 6 sin la cláusula de naturalidad (histórico en versiones del agente).
+
 ## Config compartida (verificada post-creación vía agents_get)
 
 - Idioma `es` (fallback estático; desde 2026-10-19 el idioma real de cada
@@ -26,8 +45,9 @@ nunca reutilizar el dev en prod (regla de `07-deployment.md`).
   (`language_detection` sigue activa como tool del sistema).
 - LLM `gemini-2.5-flash`, `temperature 0.4` (estabilidad anti-babbling; ver
   fix del 2026-09-29 más abajo).
-- TTS `eleven_flash_v2_5`, `optimize_streaming_latency 3`,
-  `agent_output_audio_format pcm_16000`.
+- TTS `eleven_v4_turbo` (desde 2026-11-06; antes `eleven_flash_v2_5`),
+  `agent_output_audio_format pcm_16000`, `stability 0.35`. Ver sección
+  "Voz más humana" arriba.
 - Voz `cjVigY5qzO86Huf0OWal` — default Conversational AI del workspace (la
   cuenta nueva asignó la misma voz por defecto que la anterior).
 - First message: "Hola, soy el asistente de Copp Adresd. ¿Cómo te puedo
