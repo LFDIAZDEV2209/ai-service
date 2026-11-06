@@ -39,13 +39,15 @@ def get_chat_model(
             raise ConfigError("ANTHROPIC_API_KEY no está configurada")
         from langchain_anthropic import ChatAnthropic
 
-        return ChatAnthropic(
-            model=model or settings.anthropic_model,
-            api_key=settings.anthropic_api_key,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            streaming=True,
-        )
+        kwargs: dict = {
+            "model": model or settings.anthropic_model,
+            "api_key": settings.anthropic_api_key,
+            "max_tokens": max_tokens,
+            "streaming": True,
+        }
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        return ChatAnthropic(**kwargs)
 
     if provider == "openai":
         if not settings.openai_api_key:
