@@ -87,7 +87,8 @@ ai-service/
 │   └── core/              # config (pydantic-settings), logging, errors
 ├── tests/                 # pytest: graph, guardrails, rag, api
 ├── main.py
-├── pyproject.toml         # uv (fuente de verdad) + requirements.txt (pip/Docker)
+├── pyproject.toml         # Dependencias de desarrollo (uv.lock)
+├── requirements-prod.txt  # Runtime Docker/CI con restricciones versionadas
 ├── langgraph.json         # Despliegue en LangGraph Platform
 └── .env.example
 ```
@@ -181,3 +182,27 @@ devuelven explícitamente el menú determinista recibido, sin inventar datos
 clínicos ni afirmar aprobación. La cancelación se propaga. Verificación:
 `uv run pytest tests/test_nutrition_draft.py tests/test_program_narrative.py -q`.
 
+
+## Dependencias de producción y compatibilidad del proveedor
+
+Docker y CI instalan `requirements-prod.txt`, que aplica las versiones de
+`requirements-prod-constraints.txt`. Ambos Dockerfiles copian las restricciones
+antes de ejecutar pip. El `uv.lock` local puede contener versiones anteriores;
+una prueba con `uv run` no sustituye la comprobación con el SDK desplegado.
+Para reproducir el runtime de producción con Python 3.12 en un entorno aislado:
+
+```bash
+uv venv --python 3.12 /tmp/ai-production-check
+uv pip install --python /tmp/ai-production-check/bin/python -r requirements-prod.txt pytest pytest-asyncio httpx ruff
+/tmp/ai-production-check/bin/python -m pytest -q
+/tmp/ai-production-check/bin/python -m ruff check .
+```
+
+`get_chat_model()` hereda la temperatura configurada; `temperature=0.0` la fija
+a cero; `temperature=None` la omite del contrato del proveedor. La traducción
+usa la omisión explícita, conservando proveedor y modelo. Un `temperature: null`
+del catálogo de agentes conserva su comportamiento previo de heredar el valor
+global. Los tests de contrato ejercitan el SDK real y su parser SSE con
+transporte HTTP falso, sin llamadas al proveedor ni datos de pacientes.
+
+Detalle y comprobaciones de plataforma: [dependencias de producción](docs/production-dependencies.md).

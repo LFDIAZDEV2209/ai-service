@@ -168,12 +168,15 @@ class AgentRuntimeRegistry:
     ) -> CompiledAgent:
         """Construye el grafo con los overrides del agente (provider/model/tools)."""
         try:
-            model = self._model_factory(
-                provider=runtime_config.provider,
-                model=runtime_config.model,
-                temperature=runtime_config.temperature,
-                max_tokens=runtime_config.max_tokens,
-            )
+            options: dict[str, Any] = {
+                "provider": runtime_config.provider,
+                "model": runtime_config.model,
+                "max_tokens": runtime_config.max_tokens,
+            }
+            # Un override null del catálogo sigue heredando la configuración global.
+            if runtime_config.temperature is not None:
+                options["temperature"] = runtime_config.temperature
+            model = self._model_factory(**options)
         except Exception as exc:
             raise AgentRuntimeError(
                 f"Configuración LLM inválida para agente {agent_type_id}: {exc}"

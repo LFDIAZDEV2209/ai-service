@@ -11,7 +11,7 @@ RUN apt-get update \
        libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements-prod.txt .
+COPY requirements-prod.txt requirements-prod-constraints.txt ./
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements-prod.txt alembic
 

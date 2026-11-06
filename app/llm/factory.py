@@ -11,11 +11,18 @@ from app.core.config import get_settings
 from app.core.errors import ConfigError
 
 
+class _ConfiguredTemperature:
+    """Distingue la opción omitida de None explícito (no enviar muestreo)."""
+
+
+_CONFIGURED_TEMPERATURE = _ConfiguredTemperature()
+
+
 def get_chat_model(
     provider: str | None = None,
     *,
     model: str | None = None,
-    temperature: float | None = None,
+    temperature: float | _ConfiguredTemperature | None = _CONFIGURED_TEMPERATURE,
     max_tokens: int | None = None,
 ) -> BaseChatModel:
     """Crea un modelo de chat según el proveedor indicado (o el configurado).
@@ -23,7 +30,7 @@ def get_chat_model(
     Args:
         provider: "anthropic" | "openai". Por defecto usa `settings.llm_provider`.
         model: nombre del modelo (por defecto el configurado por proveedor).
-        temperature: temperatura (por defecto la configurada).
+        temperature: omitida usa la configuración; None explícito no envía el parámetro.
         max_tokens: tope de tokens de salida (solo Anthropic).
 
     Raises:
@@ -31,7 +38,9 @@ def get_chat_model(
     """
     settings = get_settings()
     provider = (provider or settings.llm_provider).strip().lower()
-    temperature = settings.llm_temperature if temperature is None else temperature
+    temperature = (
+        settings.llm_temperature if temperature is _CONFIGURED_TEMPERATURE else temperature
+    )
     max_tokens = settings.llm_max_tokens if max_tokens is None else max_tokens
 
     if provider == "anthropic":
@@ -54,12 +63,13 @@ def get_chat_model(
             raise ConfigError("OPENAI_API_KEY no está configurada")
         from langchain_openai import ChatOpenAI
 
-        return ChatOpenAI(
-            model=model or settings.openai_model,
-            api_key=settings.openai_api_key,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            streaming=True,
-        )
+        openai_kwargs: dict = {
+            "model": model or settings.openai_model,
+            "api_key": settings.openai_api_key,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "streaming": True,
+        }
+        return ChatOpenAI(**openai_kwargs)
 
     raise ConfigError(f"Proveedor LLM desconocido: {provider!r}. Usa 'anthropic' u 'openai'.")

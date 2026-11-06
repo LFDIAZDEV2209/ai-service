@@ -148,7 +148,9 @@ class ContentTranslationService:
                     missing[key], masks[key] = _mask(item.text)
 
         if missing:
-            model = self.model or get_chat_model(temperature=0.0, max_tokens=16000)
+            # Los contratos recientes del proveedor rechazan muestreo explícito;
+            # None omite el parámetro sin cambiar de proveedor ni modelo.
+            model = self.model or get_chat_model(temperature=None, max_tokens=16000)
             sources = {_key(item.text): item.text for item in request.items}
             # Un solo plazo incluye la cola compartida, las invocaciones y su validación.
             remaining = TRANSLATION_TIMEOUT_SECONDS - (time.monotonic() - now)

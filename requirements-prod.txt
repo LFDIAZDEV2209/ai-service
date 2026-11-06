@@ -1,3 +1,4 @@
+-c requirements-prod-constraints.txt
 langgraph>=0.4
 langgraph-checkpoint-postgres>=2.0
 langchain-core>=0.3

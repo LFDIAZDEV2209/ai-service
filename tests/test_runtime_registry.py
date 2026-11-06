@@ -245,3 +245,24 @@ async def test_resolved_knowledge_bases_bind_filtered_retrieval_tool():
             config={"configurable": {"thread_id": "scope-test"}},
         )
         assert result["messages"][-1].content == "respuesta"
+
+
+@pytest.mark.parametrize("temperature", [None, 0.0, 0.45])
+async def test_null_runtime_temperature_inherits_default_without_explicit_omission(temperature):
+    """Un null de la config sincronizada conserva la herencia previa del catálogo."""
+    calls = []
+
+    def model_factory(**options):
+        calls.append(options)
+        return FakeToolAwareModel(responses=[AIMessage(content="respuesta")])
+
+    registry = AgentRuntimeRegistry(
+        model_factory=model_factory, checkpointer_factory=lambda: MemorySaver()
+    )
+    session = make_session_with_row({"temperature": temperature})
+    await registry.get_agent(AGENT_ID, session)
+    assert len(calls) == 1
+    if temperature is None:
+        assert "temperature" not in calls[0]
+    else:
+        assert calls[0]["temperature"] == temperature

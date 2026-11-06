@@ -95,7 +95,6 @@ uv run pytest tests/test_content_translation.py
 uv run ruff check app/api/routes/content_translation.py app/schemas/content_translation.py app/services/content_translation.py tests/test_content_translation.py
 ```
 
-
 Comprobación voluntaria con el proveedor real configurado, sin pacientes:
 
 ```bash
@@ -126,3 +125,11 @@ singular, plural, capitalización y mayúsculas, junto con negaciones y cantidad
 devolvió 200 en 2,088 s. Conservó `40 g`, `1,5 g` y `½`, restauró las cuatro
 equivalencias esperadas y mantuvo en esas muestras las instrucciones de no
 sustituir, no añadir azúcar, no cambiar la porción y no duplicar la cantidad.
+
+El traductor construye el modelo con `temperature=None` explícito para omitir el
+parámetro rechazado por los contratos recientes del proveedor. Conserva el
+proveedor y el modelo configurados; no prueba otro proveedor ni recupera texto
+español como éxito. La validación estructurada, los fragmentos protegidos, el
+plazo total y la cache atómica mantienen su comportamiento. La combinación de
+SDK usada por Docker/CI está fijada y se comprueba de forma aislada; véase
+[dependencias de producción](production-dependencies.md).
