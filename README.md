@@ -10,6 +10,16 @@ backend guarda el borrador y exige revisión nutricional antes de publicarlo.
 Los resultados ausentes se declaran ausentes y no se inventan diagnósticos.
 Pruebas sin proveedor real: `uv run python -m pytest tests/test_plan_generation.py`.
 
+El análisis de baterías usa `POST /internal/assessments/analyze` con `X-Internal-Key`.
+Recibe solo las señales de las últimas evaluaciones completadas seleccionadas por el backend:
+referencia única, instrumento, tipo, valor, clasificación guardada, fecha y cantidad de evaluaciones
+pendientes. No recibe identidad ni respuestas abiertas. Usa el proveedor/modelo configurado, sin
+temperatura explícita, para explicar los resultados en español o inglés y proponer hasta tres
+pasos cotidianos ligados a fuentes. No sustituye diagnósticos ni la revisión del plan nutricional.
+El esquema y las referencias se validan; un solo reintento de formato/referencias comparte el
+plazo total de 70 segundos. Los fallos responden 503 sin narrativa fabricada ni logs clínicos.
+Las regresiones de navegador viven en el repo `antares-paciente/e2e/assessment-profile-*.mjs`.
+
 Servicio hermano de `coppAddresdBack` (.NET) — juntos formarán la plataforma
 para clientes y profesionales (doctor, psicólogo, etc.) con documentación RAG,
 conocimiento de la base de datos de la API y captura de datos hacia un futuro CRM.
