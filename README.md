@@ -154,6 +154,9 @@ Cliente (frontend/UI)
 
 Endpoints internos (backend → AI Service, `X-Internal-Key`): `POST /internal/agents/sync-config`, `POST /internal/agents/ingest`, `DELETE /internal/agents/ingest/{id}`.
 
+Traducción de presentación para contenido publicado: `POST /internal/content/translate`.
+Contrato, límites, preservación de cantidades y cache: [docs/content-translation.md](docs/content-translation.md).
+
 ## 🗺️ Roadmap
 
 1. ✅ **RAG conectado**: ingest (md/txt/PDF) + pgvector + retriever aislado por KB.

@@ -11,6 +11,7 @@ from app.api.routes import (
     admin,
     agents,
     chat,
+    content_translation,
     health,
     ingest,
     internal,
@@ -78,5 +79,6 @@ def create_app() -> FastAPI:
     app.include_router(lab_exam.router)
     app.include_router(voice.router)
     app.include_router(program_narrative.router)
+    app.include_router(content_translation.router)
 
     return app
