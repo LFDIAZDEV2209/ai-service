@@ -39,6 +39,19 @@ async def assignment_narrative(
     try:
         narratives = await generate_program_narrative(payload, model)
     except Exception as exc:
+        # Proveedores recientes (Anthropic) rechazan "temperature" como campo
+        # extra; reintenta UNA vez sin ella antes de declarar indisponibilidad.
+        if "temperature: Extra inputs" in str(exc):
+            logger.warning("narrativa reintento sin temperature por incompatibilidad")
+            try:
+                retry_model = get_program_narrative_model(omit_temperature=True)
+                narratives = await generate_program_narrative(payload, retry_model)
+            except Exception as retry_exc:
+                logger.error("narrativa 503 detalle", exc_info=True)
+                raise HTTPException(
+                    status_code=503, detail="Narrativa no disponible"
+                ) from retry_exc
+            return ProgramNarrativeResponse(narratives=narratives)
         logger.error("narrativa 503 detalle", exc_info=True)
         # No exponer datos del paciente ni errores del proveedor en la respuesta.
         raise HTTPException(status_code=503, detail="Narrativa no disponible") from exc

@@ -23,9 +23,13 @@ def _truncate_narrative(text: str) -> str:
     return shortened.rstrip() + "…"
 
 
-def get_program_narrative_model() -> BaseChatModel:
-    """Reutiliza la configuración del servicio; permite sustitución en tests."""
-    return get_chat_model(temperature=0.0, max_tokens=2048)
+def get_program_narrative_model(omit_temperature: bool = False) -> BaseChatModel:
+    """Reutiliza la configuración del servicio; permite sustitución en tests.
+
+    omit_temperature=True evita enviar temperature a proveedores que la
+    rechazan (algunos modelos de Anthropic la declaran como campo extra).
+    """
+    return get_chat_model(temperature=None if omit_temperature else 0.0, max_tokens=2048)
 
 
 async def generate_program_narrative(
