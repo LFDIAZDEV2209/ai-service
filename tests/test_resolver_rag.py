@@ -32,6 +32,9 @@ def session():
             },
         }
     )
+    # La búsqueda slug→GUID del resolver no encuentra el AgentType en estos
+    # tests (no se sembrica el catálogo); la clave sigue siendo el slug.
+    result.first.return_value = None
     return AsyncMock(execute=AsyncMock(return_value=result))
 
 
@@ -183,3 +186,40 @@ async def test_default_binding_does_not_leak_patient_tool(session, scope, monkey
     assert bound.count("get_patient_data") == (
         1 if key in {"psychology", "medical", "nutrition"} else 0
     )
+
+
+async def test_slug_key_resolves_guid_for_kb_scope(scope, monkeypatch):
+    """El slug del router mapea al GUID del AgentType (filas y KBs viven por GUID)."""
+    guid = "2f18a9b7-34cc-4b5a-8d63-c5ef7b7a2f97"
+    guid_lookup = MagicMock()
+    guid_lookup.first.return_value = (guid,)
+    row_result = MagicMock()
+    row_result.scalar_one_or_none.return_value = SimpleNamespace(
+        config={
+            "system_prompt": "Psicología oficial",
+            "tools": [],
+            "retrieval_config": {
+                "enabled": True,
+                "knowledge_base_ids": ["kb-configurada"],
+                "top_k": 3,
+            },
+        }
+    )
+    session = AsyncMock(execute=AsyncMock(side_effect=[guid_lookup, row_result]))
+    factory = MagicMock(return_value=MagicMock(name="retrieve_knowledge"))
+    monkeypatch.setattr("app.agents.resolver.make_retrieve_tool", factory)
+
+    profile = await resolve_agent_profile(session, "psychology")
+
+    scope.assert_awaited_once_with(session, guid, ["kb-configurada"])
+    assert profile.extra_tools == (get_patient_data, factory.return_value)
+    assert profile.system_prompt == "Psicología oficial"
+
+
+async def test_guid_key_skips_slug_lookup(session, scope, monkeypatch):
+    """Una clave que ya es UUID no consulta el catálogo de slugs."""
+    key = "2f18a9b7-34cc-4b5a-8d63-c5ef7b7a2f97"
+    profile = await resolve_agent_profile(session, key)
+    # Solo UNA llamada: la fila; la resolución de slug no se ejecutó.
+    assert session.execute.await_count == 1
+    assert profile.system_prompt == "Psicología oficial"

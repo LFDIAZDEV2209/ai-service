@@ -63,6 +63,20 @@ _KEYWORDS: dict[str, tuple[str, ...]] = {
         "pecho",
         "respir",
         "dolor de pecho",
+        # Signos de la app (Vita): FC/PA/SPO2/pasos/sueño — la ruta de datos
+        # del paciente lee estas señales (get_patient_data) con prioridad
+        # sobre nutrition para evitar que "pasos" caiga en NEAT.
+        "signo",
+        "vital",
+        "metrica",
+        "medicion",
+        "pasos",
+        "corazon",
+        "oxigen",
+        "glucosa",
+        "dormido",
+        "reloj",
+        "anillo",
     ),
     "psychology": (
         "ansied",
@@ -82,6 +96,13 @@ _KEYWORDS: dict[str, tuple[str, ...]] = {
         "salud mental",
         "bienestar emocional",
         "mindfulness",
+        # Material del agente (constelaciones / heridas de la infancia).
+        "herida",
+        "constelacion",
+        "origen",
+        "emocion",
+        "regulacion",
+        "mindful",
     ),
 }
 
