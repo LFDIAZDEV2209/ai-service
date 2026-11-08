@@ -80,24 +80,26 @@ async def resolve_agent_profile(
         (fallback de código, nunca rompe el chat).
     """
     agent_guid = await _resolve_agent_type_guid(session, key)
+    row_keys = {str(key)}
     if agent_guid:
-        row = (
-            await session.execute(
-                select(AgentRuntimeConfigRow).where(
-                    AgentRuntimeConfigRow.agent_type_id.in_([str(key), agent_guid]),
-                    AgentRuntimeConfigRow.is_active.is_(True),
-                )
+        row_keys.add(agent_guid)
+    # Puede haber UNA fila por clave (seed histórico bajo slug + syncs de
+    # activaciones bajo GUID): nos quedamos con la MÁS RECIENTE de ambas
+    # claves; nunca explotar el turno con MultipleResultsFound (incidente
+    # 17-16 UTC del 08-11: cada request del chat base caía con 500).
+    row = (
+        await session.execute(
+            select(AgentRuntimeConfigRow)
+            .where(
+                AgentRuntimeConfigRow.agent_type_id.in_(row_keys),
+                AgentRuntimeConfigRow.is_active.is_(True),
             )
-        ).scalar_one_or_none()
-    else:
-        row = (
-            await session.execute(
-                select(AgentRuntimeConfigRow).where(
-                    AgentRuntimeConfigRow.agent_type_id == key,
-                    AgentRuntimeConfigRow.is_active.is_(True),
-                )
+            .order_by(
+                AgentRuntimeConfigRow.synced_at.desc(), AgentRuntimeConfigRow.updated_at.desc()
             )
-        ).scalar_one_or_none()
+            .limit(1)
+        )
+    ).scalar_one_or_none()
 
     if row is None:
         logger.debug("Agente %s sin config en BD; usando perfil de código", key)
