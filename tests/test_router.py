@@ -55,3 +55,20 @@ def test_saludable_no_roba_a_nutricion() -> None:
     # Falso positivo corregido: "saludable" contiene el prefijo "salud" (medical),
     # pero "comer"+"dieta" (nutrition) tienen más evidencia → gana nutrition.
     assert router.route(_state("que puedo comer hoy para una dieta saludable")) == "nutrition"
+
+
+@pytest.mark.parametrize(
+    "mensaje,esperado",
+    [
+        # Datos del paciente: la ruta medical enlaza get_patient_data.
+        ("¿Cómo están hoy mis signos vitales y mis pasos?", "medical"),
+        ("¿Cuántos pasos di ayer según mi reloj?", "medical"),
+        ("Mi presión está bien pero dormí poco", "medical"),
+        ("¿Cuánta glucosa tengo hoy?", "medical"),
+        # Material psicológico del agente (KB de constelaciones/heridas).
+        ("¿Qué heridas de la infancia se relacionan con mi ansiedad?", "psychology"),
+        ("Explícame las constelaciones familiares", "psychology"),
+    ],
+)
+def test_route_datos_del_paciente(mensaje: str, esperado: str) -> None:
+    assert router.route(_state(mensaje)) == esperado
