@@ -216,6 +216,74 @@ async def test_slug_key_resolves_guid_for_kb_scope(scope, monkeypatch):
     assert profile.system_prompt == "Psicología oficial"
 
 
+async def test_guid_row_wins_over_fresh_slug_seed(scope, monkeypatch):
+    """El re-seed del backend (fila slug, synced_at fresco) NO tapa la fila GUID."""
+    guid = "2f18a9b7-34cc-4b5a-8d63-c5ef7b7a2f97"
+    guid_lookup = MagicMock()
+    guid_lookup.first.return_value = (guid,)
+    fila_viva = SimpleNamespace(
+        config={
+            "system_prompt": "Psicología oficial v4",
+            "tools": [],
+            "retrieval_config": {
+                "enabled": True,
+                "knowledge_base_ids": ["kb-configurada"],
+                "top_k": 3,
+            },
+        }
+    )
+    tuple_guid_row = MagicMock()
+    tuple_guid_row.scalar_one_or_none.return_value = fila_viva
+    tuple_slug_row = MagicMock()
+    tuple_slug_row.scalar_one_or_none.return_value = SimpleNamespace(
+        config={"system_prompt": "Seed viejo", "tools": [], "retrieval_config": {"enabled": False}}
+    )
+    session = AsyncMock(execute=AsyncMock(side_effect=[guid_lookup, tuple_guid_row]))
+    factory = MagicMock(return_value=MagicMock(name="retrieve_knowledge"))
+    monkeypatch.setattr("app.agents.resolver.make_retrieve_tool", factory)
+
+    profile = await resolve_agent_profile(session, "psychology")
+
+    # Consulta 1: lookup del GUID; consulta 2: fila por GUID (la slug nunca se ve).
+    assert session.execute.await_count == 2
+    assert profile.system_prompt == "Psicología oficial v4"
+    assert profile.extra_tools == (get_patient_data, factory.return_value)
+
+
+async def test_slug_row_fallback_when_guid_row_missing(scope, monkeypatch):
+    """Sin fila GUID activa (seed solo-slug), la fila slug sigue sirviendo."""
+    guid = "2f18a9b7-34cc-4b5a-8d63-c5ef7b7a2f97"
+    guid_lookup = MagicMock()
+    guid_lookup.first.return_value = (guid,)
+    slug_row = MagicMock()
+    slug_row.scalar_one_or_none.return_value = SimpleNamespace(
+        config={
+            "system_prompt": "Psicología por slug",
+            "tools": [],
+            "retrieval_config": {"enabled": False},
+        }
+    )
+    session = AsyncMock(
+        execute=AsyncMock(
+            side_effect=[
+                guid_lookup,
+                MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
+                slug_row,
+            ]
+        )
+    )
+    factory = MagicMock()
+    monkeypatch.setattr("app.agents.resolver.make_retrieve_tool", factory)
+
+    profile = await resolve_agent_profile(session, "psychology")
+
+    assert session.execute.await_count == 3
+    scope.assert_not_awaited()
+    assert profile.system_prompt == "Psicología por slug"
+    assert profile.extra_tools == (get_patient_data,)
+    factory.assert_not_called()
+
+
 async def test_guid_key_skips_slug_lookup(session, scope, monkeypatch):
     """Una clave que ya es UUID no consulta el catálogo de slugs."""
     key = "2f18a9b7-34cc-4b5a-8d63-c5ef7b7a2f97"
