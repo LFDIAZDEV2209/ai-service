@@ -68,6 +68,12 @@ def test_saludable_no_roba_a_nutricion() -> None:
         # Material psicológico del agente (KB de constelaciones/heridas).
         ("¿Qué heridas de la infancia se relacionan con mi ansiedad?", "psychology"),
         ("Explícame las constelaciones familiares", "psychology"),
+        # Inputs del paciente en inglés (la app puede pedir TS offline).
+        ("What can I eat today? My meal plan", "nutrition"),
+        ("I need my meal plan for today", "nutrition"),
+        ("How many steps did I walk yesterday?", "medical"),
+        ("My blood pressure is high, what should I do?", "medical"),
+        ("I feel anxiety about work and fear", "psychology"),
     ],
 )
 def test_route_datos_del_paciente(mensaje: str, esperado: str) -> None:

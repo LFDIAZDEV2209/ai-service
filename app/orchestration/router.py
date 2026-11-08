@@ -39,6 +39,14 @@ _KEYWORDS: dict[str, tuple[str, ...]] = {
         "carbohidr",
         "nutrient",
         "peso",
+        # Raíces en inglés (pacientes configurados EN + quick actions).
+        "meal",
+        "eat",
+        "food",
+        "snack",
+        "calorie",
+        "hungry",
+        "fat",
     ),
     "medical": (
         "dolor",
@@ -77,6 +85,18 @@ _KEYWORDS: dict[str, tuple[str, ...]] = {
         "dormido",
         "reloj",
         "anillo",
+        # Raíces en inglés ("blood pressure"/"heart rate" multi-palabra no
+        # matchea con el scoring por token; las raíces unitarias sí).
+        "vital sign",
+        "pressure",
+        "heart",
+        "steps",
+        "glucose",
+        "symptom",
+        "pain",
+        "doctor",
+        "sick",
+        "sleep",
     ),
     "psychology": (
         "ansied",
@@ -103,6 +123,17 @@ _KEYWORDS: dict[str, tuple[str, ...]] = {
         "emocion",
         "regulacion",
         "mindful",
+        # Raíces en inglés.
+        "anxiety",
+        "anxious",
+        "stress",
+        "depress",
+        "sad",
+        "fear",
+        "therapy",
+        "emotion",
+        "panic",
+        "wound",
     ),
 }
 
