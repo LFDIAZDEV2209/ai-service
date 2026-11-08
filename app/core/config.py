@@ -74,6 +74,8 @@ class Settings(BaseSettings):
 
     # Clave compartida con el backend para endpoints internos (X-Internal-Key)
     internal_api_key: str = ""
+    # URL del backend para consultas internas del contexto del paciente.
+    backend_base_url: str = ""
 
     # CORS — allowlist explícita de orígenes (separados por coma en CORS_ORIGINS).
     # No hay clientes de navegador del AI Service hoy: el backend .NET lo consume

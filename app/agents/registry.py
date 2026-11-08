@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from langchain_core.tools import BaseTool
+
 from app.agents.prompts import (
     BASE_SYSTEM_PROMPT,
     MEDICAL_SYSTEM_PROMPT,
@@ -26,6 +28,7 @@ class AgentProfile:
     provider: str | None = None  # None → usar el proveedor por defecto
     model: str | None = None  # None → usar el modelo del proveedor por defecto
     tools: tuple[str, ...] = ()  # subconjunto de tools; () → todas
+    extra_tools: tuple[BaseTool, ...] = ()
 
 
 AGENTS: dict[str, AgentProfile] = {

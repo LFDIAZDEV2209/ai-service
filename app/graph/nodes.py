@@ -21,6 +21,7 @@ from app.agents.prompts import (
     build_turn_policy,
 )
 from app.agents.registry import AgentProfile
+from app.graph.language import detect_turn_language
 from app.graph.state import AgentState
 from app.memory.adaptive import AdaptiveMemoryService
 from app.memory.service import UserMemoryService
@@ -119,8 +120,11 @@ def make_agent_node(
         # Resolución del perfil activo: el precedente gana sobre el default.
         profile = await profile_resolver(state) if profile_resolver else None
         active_prompt = profile.system_prompt if profile else system_prompt
-        active_tools = profile.tools if profile and profile.tools else (tools or ALL_TOOLS)
-        active_model = model.bind_tools(list(active_tools))
+        # El contexto del paciente se ofrece por perfil o selección explícita, nunca por defecto.
+        default_tools = [tool for tool in ALL_TOOLS if tool.name != "get_patient_data"]
+        active_tools = profile.tools if profile and profile.tools else (tools or default_tools)
+        active_tools = [*active_tools, *(profile.extra_tools if profile else ())]
+        active_model = model.bind_tools(active_tools)
 
         history = completed_tool_history(list(state.get("messages", [])))
         system_blocks = [active_prompt]
@@ -152,15 +156,10 @@ def make_agent_node(
                 )
             )
 
-        # Idioma de la app del paciente (configurable['language']): señal
-        # EXPLÍCITA por turno que GANA sobre la regla de espejo del prompt y
-        # sobre el historial — habilita cambiar de idioma a mitad de
-        # conversación. Ausente ⇒ manda el prompt base (espejo del idioma del
-        # usuario, comportamiento byte-idéntico al estándar).
-        # También cubre perfiles sincronizados del ERP con prompts antiguos;
-        # la orientación de síntomas no depende de reactivar cada versión.
+        # El idioma claro del mensaje gana en este turno; si es ambiguo, manda la app.
+        # No se guarda el resultado en el estado ni en el checkpointer.
         system_blocks.append(PRACTICAL_SYMPTOM_GUIDANCE)
-        language = configurable.get("language")
+        language = detect_turn_language(state) or configurable.get("language")
         if language:
             system_blocks.append(build_language_instruction(language))
             # Política de servicio en el idioma vigente: sin derivación a
@@ -316,7 +315,10 @@ def _default_adaptive_service() -> AdaptiveMemoryService:
     return AdaptiveMemoryService(async_session())
 
 
-def make_tools_node(tools: list[BaseTool] | None = None) -> Callable[[AgentState], Awaitable[dict]]:
+def make_tools_node(
+    tools: list[BaseTool] | None = None,
+    profile_resolver: Callable[[AgentState], Awaitable[AgentProfile | None]] | None = None,
+) -> Callable[[AgentState], Awaitable[dict]]:
     """Crea el nodo de ejecución de tools para el subconjunto indicado.
 
     El wrapper es async a propósito: el `ToolNode` interno es un
@@ -339,7 +341,10 @@ def make_tools_node(tools: list[BaseTool] | None = None) -> Callable[[AgentState
         if last is not None and getattr(last, "tool_calls", None):
             tool_names = [tc.get("name", "?") for tc in last.tool_calls]
 
-        result = await node.ainvoke(state)
+        # Las tools concretas del perfil también deben estar disponibles al ejecutarlas.
+        profile = await profile_resolver(state) if profile_resolver else None
+        active_node = ToolNode([*selected, *profile.extra_tools]) if profile else node
+        result = await active_node.ainvoke(state)
         return {
             **result,
             "tools_used": tool_names,

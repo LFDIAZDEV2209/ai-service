@@ -8,11 +8,11 @@ vía `bind_tools`. Para registrar un módulo nuevo, agregalo a `_TOOL_MODULES`.
 
 from langchain_core.tools import BaseTool
 
-from app.tools import appointment, builtin, control
+from app.tools import appointment, builtin, control, patient_context
 
 # Módulos escaneados en busca de tools decoradas con @tool (orden no importa:
 # el resultado final se ordena por nombre).
-_TOOL_MODULES = (builtin, appointment, control)
+_TOOL_MODULES = (builtin, appointment, control, patient_context)
 
 
 def _collect_tools() -> list[BaseTool]:

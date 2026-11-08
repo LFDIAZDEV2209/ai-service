@@ -84,7 +84,7 @@ def build_graph(
         "agent",
         make_agent_node(model or get_chat_model(), system_prompt, tools, profile_resolver),
     )
-    workflow.add_node("tools", make_tools_node(tools))
+    workflow.add_node("tools", make_tools_node(tools, profile_resolver))
 
     if enable_memory:
         workflow.add_node("memory_load", make_memory_load_node())
