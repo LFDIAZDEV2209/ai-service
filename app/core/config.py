@@ -25,7 +25,13 @@ class Settings(BaseSettings):
 
     # LLM — proveedor por defecto: "anthropic" | "openai"
     llm_provider: str = "anthropic"
-    llm_temperature: float = 0.2
+    # Sampling global OMITIDO por defecto: los modelos thinking de Anthropic
+    # rechazan el kwarg `temperature` ("Extra inputs are not permitted",
+    # incidente 08-11: con el fallback 0.2 global, TODO chat de la app y de
+    # los agentes runtime caía con 400). Definir LLM_TEMPERATURE solo si el
+    # modelo del proveedor lo acepta; el nivel por agente va en su config
+    # (agents.agent_type_versions.config.temperature).
+    llm_temperature: float | None = None
     llm_max_tokens: int = 4096
     # Timeout de la invocación completa del grafo (LLM + tools + RAG) en el
     # chat síncrono. El backend corta a los 120s; este límite es menor para
@@ -73,6 +79,8 @@ class Settings(BaseSettings):
 
     # Clave compartida con el backend para endpoints internos (X-Internal-Key)
     internal_api_key: str = ""
+    # URL del backend para consultas internas del contexto del paciente.
+    backend_base_url: str = ""
 
     # CORS — allowlist explícita de orígenes (separados por coma en CORS_ORIGINS).
     # No hay clientes de navegador del AI Service hoy: el backend .NET lo consume

@@ -52,7 +52,8 @@ async def test_assessment_policy_precedes_qualifiers_as_untrusted_data(monkeypat
     assert "no inventes fecha" in messages[1].content
     assert "No deduzcas" in messages[1].content
     assert isinstance(messages[2], HumanMessage)
-    assert json.loads(messages[2].content)[0]["qualifier"] == request.results[0].qualifier
+    supplied = json.loads(messages[2].content)
+    assert supplied["results"][0]["qualifier"] == request.results[0].qualifier
     assert not any("Ignora reglas" in m.content for m in messages if isinstance(m, SystemMessage))
 
 

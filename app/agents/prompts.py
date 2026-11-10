@@ -54,7 +54,7 @@ clearly advise contacting local emergency services/SOS now. Do not claim to have
 triaged, excluded danger or dispatched help. Do not invent a local emergency number, delay
 contact with questionnaires, or offer medication/a scheduled appointment as a substitute.
 
-Use the app's requested language; otherwise mirror the user's language. Be warm, clear and
+Use the language instruction for this turn; otherwise mirror the user's language. Be warm, clear and
 concise. Never offer a live human-chat transfer that the app does not provide; healthcare
 professionals and appointments remain available through the app. An earlier contradictory
 answer must be corrected rather than repeated as permission to exceed this scope.
@@ -178,26 +178,20 @@ def build_control_guidance(day: int, status: str, exam_pending: bool) -> str:
 
 
 def build_language_instruction(language: str) -> str:
-    """Construye el bloque de idioma para un turno (señal explícita de la app).
+    """Fija el idioma elegido solo para este turno, sin heredar el historial.
 
-    La app del paciente (antares-paciente) envía `language` ('es' | 'en') en
-    cada request de chat. Este bloque GANA sobre la regla de espejo del prompt
-    base y sobre el idioma del historial: permite cambiar de idioma a mitad de
-    conversación sin crear un thread nuevo. Se inyecta como mensaje de sistema
-    adicional en `make_agent_node` solo cuando la señal está presente.
+    El chat detecta una señal clara del mensaje y usa el idioma de la app para
+    entradas ambiguas. La voz usa el idioma de su versión ES/EN fijada. Ninguna
+    de estas instrucciones persiste una preferencia del usuario en el historial.
     """
     if language == "en":
         return (
-            "LANGUAGE (this turn and following turns): the patient's app language "
-            "is English. Reply in English even if earlier messages in this "
-            "conversation were in another language. Keep the same language until "
-            "the app signals otherwise. Never mix languages in one reply."
+            "LANGUAGE (this turn): reply in English even if earlier messages in this "
+            "conversation were in another language. Never mix languages in one reply."
         )
     return (
-        "LANGUAGE (this turn and following turns): the patient's app language "
-        "is Spanish. Reply in Spanish even if earlier messages in this "
-        "conversation were in another language. Keep the same language until "
-        "the app signals otherwise. Never mix languages in one reply."
+        "LANGUAGE (this turn): reply in Spanish even if earlier messages in this "
+        "conversation were in another language. Never mix languages in one reply."
     )
 
 

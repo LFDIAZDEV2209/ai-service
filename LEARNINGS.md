@@ -17,3 +17,13 @@ actual. El alcance del paciente se construye en código cada vez que se invoca a
 modelo, también tras herramientas; las referencias editables van en rol de datos.
 Un test con modelo falso demuestra la composición, nunca obediencia clínica de un
 proveedor real. Requiere evaluación de respuestas desplegadas con datos sintéticos.
+
+## Integrar dev sin perder el alcance ni la recuperación del chat
+
+El merge de noviembre conserva el routing por perfil/RAG, la consulta de contexto
+del paciente, la detección de idioma por turno y la omisión de temperature para
+modelos que lo rechazan. La política educativa sigue siendo el primer bloque
+de sistema. Al añadir instrucciones de idioma, localizar las referencias por rol
+y propósito en las pruebas; su posición numérica deja de ser estable. El analizador
+conserva metadatos y reintento de formato de dev, con la política antes de cada
+intento y validación de códigos de evidencia.

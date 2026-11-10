@@ -71,7 +71,10 @@ def build_rag_subgraph(
     """Construye el subgrafo RAG (recuperar → responder)."""
     workflow = StateGraph(RagState)
     workflow.add_node("retrieve", _make_retrieve_node(retriever or Retriever()))
-    workflow.add_node("answer", _make_answer_node(model or get_chat_model()))
+    # temperature=None explícito (mismo patrón que graph.py): los modelos
+    # thinking de Anthropic rechazan el kwarg y el fallback del settings lo
+    # inyectaba siempre.
+    workflow.add_node("answer", _make_answer_node(model or get_chat_model(temperature=None)))
     workflow.add_edge(START, "retrieve")
     workflow.add_edge("retrieve", "answer")
     workflow.add_edge("answer", END)

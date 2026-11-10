@@ -28,7 +28,13 @@ async def test_every_builtin_patient_profile_keeps_code_owned_system_scope(profi
     )
     messages = model.prompts[0]
     assert messages[0] == SystemMessage(content=PATIENT_SCOPE_POLICY)
-    references = json.loads(messages[1].content.split("\n", 1)[1])
+    reference_message = next(
+        message
+        for message in messages
+        if isinstance(message, HumanMessage)
+        and message.content.startswith("DATOS AUXILIARES DE REFERENCIA")
+    )
+    references = json.loads(reference_message.content.split("\n", 1)[1])
     assert references["profile"] == profile.system_prompt
     assert all(m.content != profile.system_prompt for m in messages if isinstance(m, SystemMessage))
 

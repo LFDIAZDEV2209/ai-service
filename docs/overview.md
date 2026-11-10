@@ -204,16 +204,14 @@ Datos que guían UN turno pero **nunca se persisten** en el checkpointer:
   (evento propio en el stream, campo en la respuesta completa). Sin contexto, no se
   emite nada.
 - `language` (idioma de la app, `'es' | 'en'`): el frontend del paciente lo envía en
-  cada request de chat (normalizado por `_normalize_language`); el nodo `agent` lo
-  convierte en instrucción explícita de idioma con `build_language_instruction` —
-  **gana sobre la regla de espejo del prompt y sobre el idioma del historial**,
-  habilitando cambiar de idioma a mitad de conversación. Ausente/null ⇒ espejo
-  estándar (el agente responde en el idioma del usuario). Con señal presente también
-  viaja `build_turn_policy(language)`: bloque anti-derivación-a-humanos en el idioma
-  vigente (los agentes especializados y sincronizados de BD no siempre traen la regla
-  9 del prompt base). En voz se selecciona/verifica una versión publicada por
-  idioma y se firma esa misma versión, sin PATCH global; ver
-  `docs/VITA_PATIENT_SCOPE.md`.
+  cada request de chat (normalizado por `_normalize_language`). El nodo `agent`
+  conserva la detección del mensaje actual: una señal clara ES/EN gana en ese turno;
+  si el mensaje es ambiguo, usa la señal de la app. `build_language_instruction`
+  fija ese idioma solo para el turno y `build_turn_policy` aclara el canal de Vita,
+  sin heredar la detección al siguiente turno ni reemplazar el alcance educativo
+  fijado en código. Sin señal de mensaje ni app, se conserva el espejo del usuario.
+  En voz se selecciona/verifica una versión publicada por idioma y se firma esa
+  misma versión, sin PATCH global; ver `docs/VITA_PATIENT_SCOPE.md`.
 - Identidad: `user_id`, `patient_id`, `agent_instance_id` (leídos por los nodos de
   memoria para aislamiento).
 

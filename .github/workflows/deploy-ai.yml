@@ -109,8 +109,15 @@ jobs:
         run: |
           TASK_DEF_JSON=$(aws ecs describe-task-definition --task-definition "${{ env.ECS_SERVICE }}" --region "${{ env.AWS_REGION }}" --query "taskDefinition" --output json)
           NEW_IMAGE="${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+          # BACKEND_BASE_URL: ALB interno de la VPC para tools del AI Service
+          # (get_patient_data → /api/v1/internal/agents/patient-context con
+          # X-Internal-Key). Declarativo e idempotente (reemplaza si existe).
           NEW_TASK_DEF_JSON=$(echo "$TASK_DEF_JSON" | jq --arg img "$NEW_IMAGE" '
             .containerDefinitions[0].image = $img |
+            .containerDefinitions[0].environment = ([
+              .containerDefinitions[0].environment[]?
+              | select(.name != "BACKEND_BASE_URL")
+            ] + [{"name": "BACKEND_BASE_URL", "value": "http://internal-cooppadresd-alb-internal-1395345436.us-east-2.elb.amazonaws.com"}]) |
             del(.status, .compatibilities, .taskDefinitionArn, .revision, .registeredAt, .registeredBy, .requiresAttributes)
           ')
           REGISTERED=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF_JSON" --region "${{ env.AWS_REGION }}")

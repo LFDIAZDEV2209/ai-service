@@ -39,13 +39,16 @@ def extract_text(filename: str, content: bytes) -> str:
     """
     suffix = Path(filename).suffix.lower()
     if suffix in _TEXT_EXTENSIONS:
-        return _extract_text_plain(content)
-    if suffix == ".pdf":
-        return _extract_pdf(content)
-    raise DocumentExtractionError(
-        f"Tipo de documento no soportado: '{suffix or '(sin extensión)'}'. "
-        "Soportados: .md, .markdown, .txt, .rst, .pdf"
-    )
+        text = _extract_text_plain(content)
+    elif suffix == ".pdf":
+        text = _extract_pdf(content)
+    else:
+        raise DocumentExtractionError(
+            f"Tipo de documento no soportado: '{suffix or '(sin extensión)'}'. "
+            "Soportados: .md, .markdown, .txt, .rst, .pdf"
+        )
+    # PostgreSQL no admite NUL en campos text; conservar la separación entre palabras.
+    return text.replace("\x00", " ")
 
 
 def _extract_text_plain(content: bytes) -> str:

@@ -82,9 +82,15 @@ def build_graph(
     workflow.add_node("guardrails", guardrails_node)
     workflow.add_node(
         "agent",
-        make_agent_node(model or get_chat_model(), system_prompt, tools, profile_resolver),
+        # temperature=None explícito: los modelos thinking de Anthropic
+        # rechazan el kwarg (400 "Extra inputs are not permitted" en cada
+        # turno del chat de la app); el patrón None explícito es el mismo que
+        # usan content_translation/program_narrative/assessment_analysis.
+        make_agent_node(
+            model or get_chat_model(temperature=None), system_prompt, tools, profile_resolver
+        ),
     )
-    workflow.add_node("tools", make_tools_node(tools))
+    workflow.add_node("tools", make_tools_node(tools, profile_resolver))
 
     if enable_memory:
         workflow.add_node("memory_load", make_memory_load_node())

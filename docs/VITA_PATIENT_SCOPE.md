@@ -27,15 +27,24 @@ servicios locales de emergencia/SOS. No afirma un diagnóstico, clasificación d
 urgencia, atención ya enviada ni un número local inventado. Una consulta clínica
 individual se remite al equipo, conservando educación útil dentro de este alcance.
 
-El analizador de evaluaciones usa el mismo límite. Las etiquetas o severidades
+El idioma claro del mensaje se conserva como preferencia de este turno; para
+mensajes ambiguos se usa ES/EN de la app, sin persistir la detección. Esa selección
+no modifica el alcance del paciente. Se conservan el routing por perfil y las
+bases de conocimiento autorizadas incorporadas en dev.
+
+El analizador de evaluaciones usa el mismo límite y conserva los metadatos de
+instrumento, fecha, tipo y evaluaciones pendientes, así como un reintento acotado
+para corregir el formato sin inventar resultados. Las etiquetas o severidades
 recibidas se atribuyen a la fuente del cuestionario, sin confirmarlas como estado
 clínico actual ni inventar fechas. Se conservan cuestionarios, puntuaciones y planes
 registrados; no se recalculan ni eliminan. La API .NET debe invalidar su caché anterior
 al desplegar el nuevo analizador para no servir narraciones creadas con el alcance viejo.
 
-Las únicas herramientas registradas del grafo son hora, cálculo general, sugerencia
-de una cita (CTA, sin reservar), señal de rechazo explícito de subida y recuperación
-RAG de lectura acotada a las bases asignadas. No hay una herramienta para prescribir
+Las herramientas registradas del grafo incluyen hora, cálculo general, sugerencia
+de una cita (CTA, sin reservar), señal de rechazo explícito de subida, consulta de
+solo lectura del contexto del paciente autenticado y recuperación RAG acotada a las
+bases asignadas. La consulta del paciente se habilita por perfil o selección explícita;
+no se añade por defecto a todos los turnos. No hay una herramienta para prescribir
 ni escribir tratamientos. Los resultados RAG son referencias, no nuevas instrucciones.
 El subgrafo RAG de referencia también recibe el límite, aunque no esté conectado al
 supervisor. La inyección proactiva no invoca modelos: los textos ya redactados del
