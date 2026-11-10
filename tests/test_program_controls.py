@@ -15,6 +15,8 @@ Todo con modelos fake (sin API keys), patrón de test_appointment_suggestion.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, SystemMessage
@@ -22,7 +24,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.agents.prompts import (
     BASE_SYSTEM_PROMPT,
-    PRACTICAL_SYMPTOM_GUIDANCE,
+    PATIENT_SCOPE_POLICY,
     build_control_guidance,
 )
 from app.api.deps import get_db_session, get_graph
@@ -133,7 +135,7 @@ def recording_client():
     app.dependency_overrides.clear()
 
 
-# --- (a) Regresión: sin control_context, comportamiento byte-idéntico --------
+# --- (a) Regresión: sin control_context, sin bloque opcional --------
 
 
 def test_absent_context_prompt_and_payload_identical_to_baseline(recording_client):
@@ -148,9 +150,9 @@ def test_absent_context_prompt_and_payload_identical_to_baseline(recording_clien
     # Sin contexto de control: base y guía general, sin bloque de control.
     assert len(fake.prompts) == 1
     prompt = fake.prompts[0]
-    assert [type(m).__name__ for m in prompt] == ["SystemMessage", "SystemMessage", "HumanMessage"]
-    assert prompt[0].content == BASE_SYSTEM_PROMPT
-    assert prompt[1].content == PRACTICAL_SYMPTOM_GUIDANCE
+    assert [type(m).__name__ for m in prompt] == ["SystemMessage", "HumanMessage", "HumanMessage"]
+    assert prompt[0].content == PATIENT_SCOPE_POLICY
+    assert json.loads(prompt[1].content.split("\n", 1)[1])["profile"] == BASE_SYSTEM_PROMPT
     assert prompt[-1].content == "hola"
 
 
@@ -181,7 +183,7 @@ def test_control_context_injects_guidance_verbatim(recording_client):
     expected = build_control_guidance(day=3, status="sent", exam_pending=True)
     assert any(isinstance(m, SystemMessage) and m.content == expected for m in prompt)
     # El bloque base permanece intacto y la guía es un SystemMessage extra.
-    assert prompt[0].content == BASE_SYSTEM_PROMPT
+    assert prompt[0].content == PATIENT_SCOPE_POLICY
 
 
 def test_guidance_is_only_addition_when_context_present(recording_client):

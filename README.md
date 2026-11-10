@@ -2,6 +2,10 @@
 
 Agente de IA escalable para **CoppAddresd**, construido con **LangGraph** + **FastAPI**.
 
+El alcance de Vita para pacientes es educación general y seguimiento de planes
+aprobados, con laboratorio factual y voz cerrada a versiones/herramientas verificadas.
+Ver [límites, configuración y evidencia pendiente](docs/VITA_PATIENT_SCOPE.md).
+
 La generación nutricional interna acepta `clinical_context.assessments`: últimos
 resultados persistidos de baterías (`code`, `label`, `value`, `qualifier`,
 `severity`, `observed_at`), sin identidad ni respuestas abiertas del paciente.

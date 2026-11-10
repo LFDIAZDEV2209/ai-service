@@ -1,5 +1,10 @@
 # ElevenLabs en CoppAddresd — asistente de voz para pacientes
 
+> **Alcance vigente de primera publicación:** leer
+> [VITA_PATIENT_SCOPE.md](../VITA_PATIENT_SCOPE.md) antes de configurar/desplegar.
+> Las referencias siguientes a prompt clínico, PATCH de idioma y E2E corresponden
+> al historial previo; no acreditan las nuevas versiones ES/EN ni sus herramientas.
+
 Integración profesional de **ElevenLabs Agents** (Conversational AI) para la
 app de pacientes `antares-paciente`, siguiendo el plan de
 `PROMPT_ELEVENLABS.md`. Estado: **implementado y verificado en desarrollo**

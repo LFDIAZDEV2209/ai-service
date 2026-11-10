@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -190,7 +191,7 @@ class FeedbackResponse(BaseModel):
 
 
 class LabExamMetric(BaseModel):
-    """Métrica clínica individual extraída de un examen de laboratorio."""
+    """Candidato transcrito del documento, pendiente de verificación profesional."""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -198,7 +199,9 @@ class LabExamMetric(BaseModel):
         validation_alias=AliasChoices("metric_name", "metric_key"),
         description="Nombre canónico de la métrica en el catálogo.",
     )
-    value: float = Field(description="Valor numérico de la medición.")
+    value: float = Field(
+        allow_inf_nan=False, description="Valor transcrito pendiente de verificación."
+    )
     unit_symbol: str = Field(
         default="",
         validation_alias=AliasChoices("unit_symbol", "unit"),
@@ -206,7 +209,17 @@ class LabExamMetric(BaseModel):
     )
     observed_at: datetime | None = Field(
         default=None,
-        description="Fecha y hora de observación si está presente en el documento.",
+        description="Fecha de observación SOLO si está impresa; nunca inferida ni fecha de subida.",
+    )
+    source_text: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="Fragmento literal transcrito del documento; candidato, no evidencia validada.",
+    )
+    source_page: int | None = Field(
+        default=None,
+        ge=1,
+        description="Página del documento, base 1; null si no puede identificarse.",
     )
 
 
@@ -234,18 +247,32 @@ class LabExamResponse(BaseModel):
 class PreviousMeasurement(BaseModel):
     """Evolución pre-computada por el backend para una métrica del catálogo.
 
-    La aritmética (delta) y la dirección las calcula el backend; el LLM solo
-    narra. Los campos opcionales solo tienen sentido cuando `direction` no es
-    `first_record`.
+    El backend calcula delta/cambio numérico. El texto se genera sin LLM y
+    conserva valores, fechas y procedencia; no asigna beneficio clínico.
     """
 
-    direction: str = Field(description="worsened | improved | stable | changed | first_record")
-    previous_value: float | None = None
+    # Se tolera el campo legado, pero su juicio clínico nunca se narra.
+    direction: str = Field(
+        default="changed",
+        max_length=32,
+        description="Legado: changed | stable | first_record; no expresa beneficio clínico.",
+    )
+    change: (
+        Literal["increase", "decrease", "unchanged", "not_comparable", "first_record"] | None
+    ) = None
+    previous_value: float | None = Field(default=None, allow_inf_nan=False)
     previous_unit: str | None = None
     previous_date: datetime | None = None
-    delta: float | None = Field(default=None, description="current - previous (calculado en .NET)")
-    current_value: float | None = None
+    delta: float | None = Field(
+        default=None,
+        allow_inf_nan=False,
+        description="current - previous, solo con unidades/fechas comparables; calculado en .NET.",
+    )
+    current_value: float | None = Field(default=None, allow_inf_nan=False)
     current_unit: str | None = None
+    current_date: datetime | None = None
+    previous_source: str | None = Field(default=None, max_length=100)
+    current_source: str | None = Field(default=None, max_length=100)
 
 
 class NarrateRequest(BaseModel):
@@ -266,6 +293,9 @@ class NarrateRequest(BaseModel):
 
 
 class NarrateResponse(BaseModel):
-    """Respuesta del endpoint de narración. Siempre 200; vacío ante cualquier fallo."""
+    """Texto factual determinista en el campo público histórico."""
 
-    empathetic_message: str = Field(default="", description="Mensaje empático generado.")
+    empathetic_message: str = Field(
+        default="",
+        description="Texto factual determinista, sin interpretación clínica ni proveedor LLM.",
+    )

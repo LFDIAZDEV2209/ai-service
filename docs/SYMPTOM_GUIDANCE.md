@@ -1,43 +1,22 @@
-# Orientación práctica de síntomas
+# Educación sobre síntomas y resultados de cuestionarios
 
-La guía `PRACTICAL_SYMPTOM_GUIDANCE` se inyecta por turno en `make_agent_node`,
-incluso con perfiles personalizados sincronizados desde ERP. No hace falta
-reactivar cada versión de agente. Reiniciar el servicio carga el código nuevo.
+El alcance vigente se define en [VITA_PATIENT_SCOPE.md](VITA_PATIENT_SCOPE.md).
+La antigua guía `PRACTICAL_SYMPTOM_GUIDANCE`, que permitía seleccionar una opción OTC
+para síntomas individuales, se retiró. No debe reintroducirse mediante perfiles ERP,
+memoria, documentación RAG ni configuración del proveedor de voz.
 
-Ante síntomas leves ofrece medidas concretas de autocuidado y una indicación
-breve de consultar si persisten, empeoran o se repiten. Puede explicar una opción
-habitual sin receta por nombre genérico cuando hay contexto suficiente; antes
-de sugerir su uso comprueba edad, embarazo cuando corresponda, alergias,
-medicación ya tomada, alcohol y contraindicaciones. No considera la ausencia
-de registros una historia negativa. No presenta cantidades, intervalos ni
-máximos diarios: remite a la etiqueta local o al farmacéutico. No prescribe
-fármacos de receta, diagnostica ni modifica tratamientos profesionales.
+Vita conserva explicaciones generales útiles, hábitos cotidianos de bajo riesgo,
+seguimiento del plan aprobado y orientación clara a contactar emergencias/SOS ante
+peligro inmediato. No elige tratamiento/dosis personales ni interpreta el estado
+clínico a partir de laboratorios, wearable o cuestionarios.
 
-Las señales de alarma mantienen indicación inmediata de emergencias/SOS.
-Una advertencia legal no sustituye las acciones útiles ni debe convertir toda
-molestia transitoria en una derivación automática. La guía no agrega una lectura
-automática del expediente clínico al chat: pide los datos faltantes.
+`POST /internal/assessments/analyze` conserva resumen, prioridades con evidencia,
+ánimo y preguntas para el equipo. Sus etiquetas de origen se atribuyen al cuestionario;
+no se convierten en diagnóstico, riesgo actual ni tratamiento independiente. La API
+.NET mantiene identidad, autorización, persistencia y caché, que debe revisionarse
+con el nuevo alcance.
 
-Criterios consultados el 4 de noviembre de 2026:
-- [NHS: headaches](https://www.nhs.uk/symptoms/headaches/)
-- [MedlinePlus: acetaminophen](https://medlineplus.gov/druginfo/meds/a681004.html)
-- [MedlinePlus: ibuprofen](https://medlineplus.gov/druginfo/meds/a682159.html)
-- [FDA: acetaminophen](https://www.fda.gov/drugs/safe-use-over-counter-pain-relievers-and-fever-reducers/acetaminophen)
-
-`antares-paciente/e2e/chat-symptom-guidance.mjs` recorre la app, Auth, Gateway,
-API y este servicio con respuestas reales del proveedor. Identifica la burbuja
-por el ID de la ejecución terminada, para no confundir una respuesta histórica
-con el turno bajo prueba. Casos: cefalea leve/autocuidado, adulto con contexto
-suficiente/opción OTC, cefalea súbita con déficit neurológico, y enfermedad
-hepática con acetaminofén ya tomado. Los pacientes y mensajes son sintéticos;
-no es una validación médica exhaustiva de las respuestas del modelo.
-
-# Explicación de evaluaciones
-
-`POST /internal/assessments/analyze`, protegido por la clave interna existente,
-recibe hasta 250 resultados sin identificadores personales. Responde con texto
-estructurado: resumen, 1–3 prioridades con evidencia y acción, ánimo y hasta
-3 preguntas para el equipo. Usa el modelo configurado y valida que los códigos
-de evidencia pertenezcan a la entrada. Devuelve 503 sin datos clínicos ni texto
-del proveedor en logs si falla. No suma escalas ni asigna diagnósticos o rangos
-no suministrados. La API .NET controla identidad, autorización, caché y persistencia.
+El antiguo E2E `chat-symptom-guidance.mjs` contiene expectativas históricas de opciones
+OTC personalizadas. Debe adaptarse al alcance aprobado antes de usarlo como criterio
+de aceptación de esta versión; las pruebas de composición de este repositorio no
+sustituyen validar las respuestas reales de chat y voz.

@@ -1,5 +1,10 @@
 # 07 — Despliegue (TestFlight / producción)
 
+> **Alcance vigente de primera publicación:** leer
+> [VITA_PATIENT_SCOPE.md](../VITA_PATIENT_SCOPE.md) antes de configurar/desplegar.
+> Las referencias siguientes a prompt clínico, PATCH de idioma y E2E corresponden
+> al historial previo; no acreditan las nuevas versiones ES/EN ni sus herramientas.
+
 > FASE 13/14 del plan. La app TestFlight apunta a `https://erp.coppadresd.com`
 > (`antares-paciente/.env.production`): el endpoint nuevo debe existir allí.
 

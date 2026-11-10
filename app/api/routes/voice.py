@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.security import require_internal_key
 from app.core.config import get_settings
-from app.voice.client import VoiceSessionError, create_signed_url, set_agent_language
+from app.voice.client import VoiceSessionError, create_signed_url, verify_patient_voice_version
 from app.voice.schemas import VoiceSessionRequest, VoiceSessionResponse
 
 
@@ -20,6 +20,7 @@ def _normalize_voice_language(language: str | None) -> str | None:
     """Normaliza el idioma de la app: solo 'en'/'es' son válidos; resto ⇒ None."""
     normalized = (language or "").strip().lower()
     return normalized if normalized in ("en", "es") else None
+
 
 logger = logging.getLogger(__name__)
 
@@ -49,15 +50,21 @@ async def create_voice_session(payload: VoiceSessionRequest) -> VoiceSessionResp
             detail="Configuración de voz incompleta (ELEVENLABS_API_KEY / ELEVENLABS_AGENT_ID).",
         )
 
-    # Idioma de la app (si vino): dejar el agente hablando ese idioma ANTES
-    # de emitir el signed URL (los overrides del cliente no aplican con
-    # signed URL). Fail-open: un fallo del PATCH no rompe la sesión.
-    language = _normalize_voice_language(payload.language)
-    if language:
-        await set_agent_language(settings, settings.elevenlabs_agent_id, language)
-
+    # Cada idioma apunta a una instantánea aprobada. No se modifica el agente
+    # global ni se recurre a su configuración mutable si falta la instantánea.
+    language = _normalize_voice_language(payload.language) or "es"
+    version_id = (
+        settings.elevenlabs_patient_version_en
+        if language == "en"
+        else settings.elevenlabs_patient_version_es
+    )
+    if not version_id or not version_id.startswith("agtvrsn_"):
+        raise HTTPException(status_code=503, detail="La voz no está disponible en este momento.")
     try:
-        session = await create_signed_url(settings, settings.elevenlabs_agent_id)
+        await verify_patient_voice_version(
+            settings, settings.elevenlabs_agent_id, version_id, language
+        )
+        session = await create_signed_url(settings, settings.elevenlabs_agent_id, version_id)
     except VoiceSessionError as exc:
         # Mapeo a HTTP: el detalle interno quedó logueado en el cliente.
         status = exc.status or 502

@@ -1,275 +1,314 @@
-"""Tests del endpoint interno de sesiones de voz (ElevenLabs).
+"""Sesiones con versión verificada y transporte falso; ninguna llamada al proveedor real."""
 
-Verifica que:
-1. El endpoint exige `X-Internal-Key` (401 sin header).
-2. Sin `VOICE_ENABLED` → 503 (degradación explícita, no 500).
-3. Con la config habilitada y httpx mocked (MockTransport), emite el
-   signed URL y no lo loguea ni lo filtra en errores.
-4. Fallo de ElevenLabs (401/500) → 502 con mensaje seguro.
-"""
-
-from __future__ import annotations
+import json
+from copy import deepcopy
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app.agents.prompts import VOICE_FIRST_MESSAGES, build_patient_voice_prompt
 from app.api.main import create_app
 from app.core.config import get_settings
 from app.voice import client as voice_client
 
 URL = "/internal/voice/session"
-
 HEADERS = {"X-Internal-Key": get_settings().internal_api_key}
+VERSIONS = {"es": "agtvrsn_test_es", "en": "agtvrsn_test_en"}
 
 
-@pytest.fixture
-def client():
-    """App de test con settings controladas por variables de entorno."""
-    app = create_app()
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
+def _configuration(language):
+    return {
+        "agent_id": "agent_test",
+        "version_id": VERSIONS[language],
+        "conversation_config": {
+            "agent": {
+                "language": language,
+                "first_message": VOICE_FIRST_MESSAGES[language],
+                "prompt": {"prompt": build_patient_voice_prompt(language)},
+            }
+        },
+        "platform_settings": {"auth": {"enable_auth": True}, "overrides": {}},
+    }
 
 
-def _apply_voice_env(monkeypatch, *, enabled: str = "true") -> None:
-    """Fija las variables de entorno de voz para el test (antes del get_settings).
-
-    `AUTO_MIGRATE=false` evita que el lifespan toque PostgreSQL: el módulo de
-    voz no depende de BD y los tests no deben depender de una base local.
-    """
+@pytest.fixture(autouse=True)
+def controlled_settings(monkeypatch):
     monkeypatch.setenv("AUTO_MIGRATE", "false")
-    monkeypatch.setenv("VOICE_ENABLED", enabled)
-    if enabled == "true":
-        monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test_no_real")
-        monkeypatch.setenv("ELEVENLABS_AGENT_ID", "agent_test")
-        monkeypatch.setenv("ELEVENLABS_BASE_URL", "https://api.elevenlabs.test")
+    monkeypatch.setenv("VOICE_ENABLED", "true")
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test_no_real")
+    monkeypatch.setenv("ELEVENLABS_AGENT_ID", "agent_test")
+    monkeypatch.setenv("ELEVENLABS_BASE_URL", "https://api.elevenlabs.test")
+    for language, version in VERSIONS.items():
+        monkeypatch.setenv(f"ELEVENLABS_PATIENT_VERSION_{language.upper()}", version)
+    monkeypatch.setenv("ELEVENLABS_PATIENT_TOOL_CONFIG_SHA256", "{}")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
-def _mock_elevenlabs(monkeypatch, handler):
-    """Reemplaza httpx.AsyncClient.get por un transporte simulado."""
+def _transport(monkeypatch, handler):
     transport = httpx.MockTransport(handler)
 
-    class _PatchedClient(httpx.AsyncClient):
+    class PatchedClient(httpx.AsyncClient):
         def __init__(self, *args, **kwargs):
-            kwargs["transport"] = transport
+            kwargs.setdefault("transport", transport)
             super().__init__(*args, **kwargs)
 
-    monkeypatch.setattr(voice_client.httpx, "AsyncClient", _PatchedClient)
+    monkeypatch.setattr(voice_client.httpx, "AsyncClient", PatchedClient)
 
 
-# --- Autenticación y degradación ----------------------------------------
+def _post(language="es", headers=HEADERS):
+    with TestClient(create_app()) as client:
+        return client.post(URL, json={"user_id": "u-test", "language": language}, headers=headers)
 
 
-def test_voice_session_requires_internal_key():
-    app = create_app()
-    with TestClient(app) as tc:
-        res = tc.post(URL, json={"user_id": "u1"})
-    assert res.status_code in (401, 403)
+def test_requires_internal_key(monkeypatch):
+    _transport(monkeypatch, lambda _: pytest.fail("must not contact provider"))
+    assert _post(headers={}).status_code == 401
 
 
-def test_voice_session_disabled(monkeypatch):
-    _apply_voice_env(monkeypatch, enabled="false")
+@pytest.mark.parametrize("variable", ["VOICE_ENABLED", "ELEVENLABS_PATIENT_VERSION_ES"])
+def test_missing_approved_configuration_never_issues_credentials(monkeypatch, variable):
+    monkeypatch.setenv(variable, "false" if variable == "VOICE_ENABLED" else "")
     get_settings.cache_clear()
-    try:
-        app = create_app()
-        with TestClient(app) as tc:
-            res = tc.post(
-                URL,
-                json={"user_id": "u1"},
-                headers=HEADERS,
-            )
-        assert res.status_code == 503
-        assert "Voz deshabilitada" in res.json()["detail"]
-    finally:
-        get_settings.cache_clear()
+    _transport(monkeypatch, lambda _: pytest.fail("must not contact provider"))
+    assert _post().status_code == 503
 
 
-# --- Contrato feliz ------------------------------------------------------
+@pytest.mark.parametrize(
+    "language,normalized", [("es", "es"), ("en", "en"), (None, "es"), ("fr", "es")]
+)
+def test_verifies_then_signs_the_same_version_without_shared_patch(
+    monkeypatch, language, normalized
+):
+    calls = []
 
-
-def test_voice_session_success(monkeypatch):
-    _apply_voice_env(monkeypatch, enabled="true")
-
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request):
+        calls.append(request)
+        assert request.method == "GET"
         assert request.headers["xi-api-key"] == "sk_test_no_real"
-        assert "agent_id=agent_test" in str(request.url)
+        assert request.url.params["version_id"] == VERSIONS[normalized]
+        if request.url.path.endswith("/agents/agent_test"):
+            return httpx.Response(200, json=_configuration(normalized))
+        assert request.url.path.endswith("/conversation/get-signed-url")
+        assert request.url.params["agent_id"] == "agent_test"
+        assert "enable_conversation_config_override" not in request.url.params
         return httpx.Response(
-            200,
-            json={
-                "signed_url": "wss://signed.example/one-time-token",
-                "conversation_id": "conv_123",
-            },
+            200, json={"signed_url": "wss://signed.example/token", "conversation_id": "c-test"}
         )
 
-    _mock_elevenlabs(monkeypatch, handler)
+    _transport(monkeypatch, handler)
+    response = _post(language)
+    assert response.status_code == 200
+    assert response.json() == {
+        "signed_url": "wss://signed.example/token",
+        "conversation_id": "c-test",
+        "agent_id": "agent_test",
+    }
+    assert len(calls) == 2
+    assert calls[0].url.path.endswith("/agents/agent_test")
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda p: p.update(version_id="agtvrsn_wrong"),
+        lambda p: p.update(agent_id="wrong"),
+        lambda p: p["conversation_config"]["agent"]["prompt"].update(prompt="Elige dosis"),
+        lambda p: p["conversation_config"]["agent"].update(language="en"),
+        lambda p: p["conversation_config"]["agent"].update(first_message="Soy médico"),
+        lambda p: p["platform_settings"]["auth"].update(enable_auth=False),
+        lambda p: p["platform_settings"].update(
+            overrides={"conversation_config_override": {"agent": {"prompt": {"prompt": True}}}}
+        ),
+        lambda p: p["platform_settings"].update(overrides="unknown"),
+        lambda p: p.update(workflow={"nodes": {"subagent": {"prompt": "other"}}}),
+        lambda p: p.update(procedures=["proc_other"]),
+        lambda p: p["conversation_config"]["agent"]["prompt"].update(
+            knowledge_base=[{"id": "clinical"}]
+        ),
+        lambda p: p["conversation_config"]["agent"]["prompt"].update(tools=[{"type": "webhook"}]),
+        lambda p: p["conversation_config"]["agent"]["prompt"].update(rag={"enabled": True}),
+        lambda p: p["conversation_config"]["agent"]["prompt"].update(tool_ids=["../other"]),
+        lambda p: p["conversation_config"]["agent"]["prompt"].update(tool_ids="tool_one"),
+        lambda p: p["conversation_config"]["agent"]["prompt"].update(
+            tool_ids=["tool_one", "tool_one"]
+        ),
+        lambda p: p["conversation_config"].update(language_presets={"en": {}}),
+        lambda p: p["conversation_config"]["agent"]["prompt"].update(native_mcp_server_ids=["mcp"]),
+        lambda p: p["conversation_config"]["agent"]["prompt"].update(
+            built_in_tools={"transfer_to_agent": {"type": "system"}}
+        ),
+        lambda p: p["platform_settings"].update(
+            workspace_overrides={
+                "conversation_initiation_client_data_webhook": {"url": "https://other"}
+            }
+        ),
+    ],
+)
+def test_scope_or_override_mismatch_fails_closed_before_signed_url(monkeypatch, change):
+    payload = deepcopy(_configuration("es"))
+    change(payload)
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        assert request.url.path.endswith("/agents/agent_test")
+        return httpx.Response(200, json=payload)
+
+    _transport(monkeypatch, handler)
+    response = _post()
+    assert response.status_code == 503
+    assert response.json()["detail"] == "La voz no está disponible en este momento."
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("body", [None, [], {}, {"conversation_config": []}])
+def test_malformed_verification_response_fails_closed(monkeypatch, body):
+    _transport(monkeypatch, lambda _: httpx.Response(200, json=body))
+    assert _post().status_code == 503
+
+
+@pytest.mark.parametrize("status", [401, 404, 500])
+def test_unavailable_verification_fails_closed_without_credentials(monkeypatch, status):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(status, text="secret provider diagnostic")
+
+    _transport(monkeypatch, handler)
+    response = _post()
+    assert response.status_code == 503
+    assert "secret" not in response.text
+    assert len(calls) == 1
+
+
+def test_verification_timeout_fails_closed(monkeypatch):
+    def handler(request):
+        raise httpx.ReadTimeout("private transport details", request=request)
+
+    _transport(monkeypatch, handler)
+    response = _post()
+    assert response.status_code == 503
+    assert "private" not in response.text
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        [],
+        {},
+        {"signed_url": "https://unsafe"},
+        {"signed_url": "wss://[invalid"},
+        {"signed_url": "wss://ok", "conversation_id": 12},
+    ],
+)
+def test_malformed_signed_url_is_safe_upstream_error(monkeypatch, body):
+    def handler(request):
+        if request.url.path.endswith("/agents/agent_test"):
+            return httpx.Response(200, json=_configuration("es"))
+        return httpx.Response(200, json=body)
+
+    _transport(monkeypatch, handler)
+    response = _post()
+    assert response.status_code == 502
+    assert "signed_url" not in response.text
+
+
+async def test_concurrent_locales_pin_each_request_and_reverify_without_cache(monkeypatch):
+    import asyncio
+
+    from app.api.routes.voice import create_voice_session
+    from app.voice.schemas import VoiceSessionRequest
+
+    calls = []
+
+    async def handler(request):
+        version = request.url.params["version_id"]
+        language = next(k for k, v in VERSIONS.items() if v == version)
+        calls.append((request.url.path, version))
+        if request.url.path.endswith("/agents/agent_test"):
+            await asyncio.sleep(0)
+            return httpx.Response(200, json=_configuration(language))
+        return httpx.Response(200, json={"signed_url": f"wss://signed.example/{language}"})
+
+    _transport(monkeypatch, handler)
+    responses = await asyncio.gather(
+        *[
+            create_voice_session(VoiceSessionRequest(user_id="u-test", language=language))
+            for language in ("es", "en", "es")
+        ]
+    )
+    assert [r.signed_url for r in responses] == [
+        "wss://signed.example/es",
+        "wss://signed.example/en",
+        "wss://signed.example/es",
+    ]
+    assert len(calls) == 6
+    assert sum(path.endswith("/agents/agent_test") for path, _ in calls) == 3
+
+
+@pytest.mark.parametrize(
+    "failure", [None, "unapproved", "changed", "server", "wrong_name", "mock", "unavailable"]
+)
+def test_attached_tools_require_reviewed_client_definition_each_session(monkeypatch, failure):
+    tool_id = "tool_appointment"
+    tool_config = {
+        "type": "client",
+        "name": "get_my_upcoming_appointments",
+        "description": "Read own appointments",
+        "expects_response": True,
+        "parameters": {"type": "object", "properties": {}},
+    }
+    approved = voice_client.patient_tool_config_digest(tool_config)
+    # Unapproved tools fail before a tool lookup; all others must be re-read.
+    monkeypatch.setenv(
+        "ELEVENLABS_PATIENT_TOOL_CONFIG_SHA256",
+        json.dumps({} if failure == "unapproved" else {tool_id: approved}),
+    )
     get_settings.cache_clear()
-    try:
-        app = create_app()
-        with TestClient(app) as tc:
-            res = tc.post(
-                URL,
+    provider_config = deepcopy(tool_config)
+    if failure == "changed":
+        provider_config["description"] = "Changed after review"
+    if failure == "server":
+        provider_config["type"] = "webhook"
+    if failure == "wrong_name":
+        provider_config["name"] = "prescribe_drug"
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        if request.url.path.endswith("/agents/agent_test"):
+            version = _configuration("es")
+            version["conversation_config"]["agent"]["prompt"]["tool_ids"] = [tool_id]
+            return httpx.Response(200, json=version)
+        if request.url.path.endswith("/tools/" + tool_id):
+            return httpx.Response(
+                500 if failure == "unavailable" else 200,
                 json={
-                    "user_id": "u-1",
-                    "patient_id": "p-1",
-                    "thread_id": "proactive-p-1",
+                    "id": tool_id,
+                    "tool_config": provider_config,
+                    "response_mocks": [{"mock_result": "take drug"}] if failure == "mock" else [],
                 },
-                headers=HEADERS,
             )
-        assert res.status_code == 200
-        body = res.json()
-        assert body["signed_url"].startswith("wss://")
-        assert body["agent_id"] == "agent_test"
-        assert body["conversation_id"] == "conv_123"
-    finally:
-        get_settings.cache_clear()
+        assert failure is None, "unapproved definitions must not obtain credentials"
+        return httpx.Response(200, json={"signed_url": "wss://signed.example/approved"})
+
+    _transport(monkeypatch, handler)
+    for _ in range(2):
+        response = _post()
+        assert response.status_code == (200 if failure is None else 503)
+    assert calls.count("/v1/convai/agents/agent_test") == 2
+    assert calls.count("/v1/convai/tools/" + tool_id) == (0 if failure == "unapproved" else 2)
 
 
-# --- Errores de la plataforma -------------------------------------------
-
-
-def test_voice_session_elevenlabs_unauthorized(monkeypatch):
-    _apply_voice_env(monkeypatch, enabled="true")
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(401, json={"detail": {"status": "invalid_api_key"}})
-
-    _mock_elevenlabs(monkeypatch, handler)
-    get_settings.cache_clear()
-    try:
-        app = create_app()
-        with TestClient(app) as tc:
-            res = tc.post(URL, json={"user_id": "u-1"}, headers=HEADERS)
-        assert res.status_code == 401
-        # Mensaje seguro: no expone la key ni el signed URL.
-        assert "signed_url" not in res.text
-    finally:
-        get_settings.cache_clear()
-
-
-def test_voice_session_elevenlabs_server_error(monkeypatch):
-    _apply_voice_env(monkeypatch, enabled="true")
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, text="boom")
-
-    _mock_elevenlabs(monkeypatch, handler)
-    get_settings.cache_clear()
-    try:
-        app = create_app()
-        with TestClient(app) as tc:
-            res = tc.post(URL, json={"user_id": "u-1"}, headers=HEADERS)
-        assert res.status_code == 502
-    finally:
-        get_settings.cache_clear()
-
-
-# --- Idioma de la app: PATCH server-side del agente antes del signed URL -----
-
-
-def test_voice_session_with_language_patches_agent_first(monkeypatch):
-    """Con `language` presente: PATCH de idioma/first_message ANTES del GET.
-
-    Con sesiones por signed URL los overrides del cliente no aplican: el
-    idioma de la voz se resuelve server-side (elección: 1 agente mutado por
-    sesión, fail-open).
-    """
-    _apply_voice_env(monkeypatch, enabled="true")
-    calls: list[tuple[str, str]] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append((request.method, request.url.path))
-        if request.method == "PATCH":
-            return httpx.Response(200, json={})
-        return httpx.Response(
-            200,
-            json={"signed_url": "wss://elevenlabs.test/signed", "conversation_id": "c-1"},
-        )
-
-    _mock_elevenlabs(monkeypatch, handler)
-    get_settings.cache_clear()
-    try:
-        app = create_app()
-        with TestClient(app) as tc:
-            res = tc.post(URL, json={"user_id": "u-1", "language": "en"}, headers=HEADERS)
-        assert res.status_code == 200
-
-        # Orden: PATCH primero, GET después; el body se valida en
-        # test_voice_session_patch_body.
-        assert calls[0][0] == "PATCH" and calls[1][0] == "GET"
-        assert calls[0][1].endswith("/v1/convai/agents/agent_test")
-    finally:
-        get_settings.cache_clear()
-
-
-def test_voice_session_patch_body_shape(monkeypatch):
-    """El PATCH lleva conversation_config.agent.{language, first_message}."""
-    _apply_voice_env(monkeypatch, enabled="true")
-    seen: dict = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.method == "PATCH":
-            import json as _json
-
-            seen["path"] = str(request.url.path)
-            seen["body"] = _json.loads(request.content.decode())
-            return httpx.Response(200, json={})
-        return httpx.Response(200, json={"signed_url": "wss://x", "conversation_id": None})
-
-    _mock_elevenlabs(monkeypatch, handler)
-    get_settings.cache_clear()
-    try:
-        app = create_app()
-        with TestClient(app) as tc:
-            res = tc.post(URL, json={"user_id": "u-1", "language": "en"}, headers=HEADERS)
-        assert res.status_code == 200
-        agent = seen["body"]["conversation_config"]["agent"]
-        assert seen["path"].endswith("/v1/convai/agents/agent_test")
-        assert agent["language"] == "en"
-        assert agent["first_message"].startswith("Hi, I'm the Copp Adresd assistant")
-    finally:
-        get_settings.cache_clear()
-
-
-def test_voice_session_without_language_skips_patch(monkeypatch):
-    """Sin `language` (o valor desconocido): sin PATCH, comportamiento histórico."""
-    _apply_voice_env(monkeypatch, enabled="true")
-    methods: list[str] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        methods.append(request.method)
-        return httpx.Response(200, json={"signed_url": "wss://x", "conversation_id": None})
-
-    _mock_elevenlabs(monkeypatch, handler)
-    get_settings.cache_clear()
-    try:
-        app = create_app()
-        with TestClient(app) as tc:
-            res = tc.post(URL, json={"user_id": "u-1"}, headers=HEADERS)
-            assert res.status_code == 200
-            res = tc.post(URL, json={"user_id": "u-1", "language": "fr"}, headers=HEADERS)
-            assert res.status_code == 200
-        assert methods == ["GET", "GET"]
-    finally:
-        get_settings.cache_clear()
-
-
-def test_voice_session_patch_failure_is_fail_open(monkeypatch):
-    """PATCH rechazado (500) NO rompe la sesión: se emite el signed URL igual."""
-    _apply_voice_env(monkeypatch, enabled="true")
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.method == "PATCH":
-            return httpx.Response(500, text="boom")
-        return httpx.Response(200, json={"signed_url": "wss://x", "conversation_id": None})
-
-    _mock_elevenlabs(monkeypatch, handler)
-    get_settings.cache_clear()
-    try:
-        app = create_app()
-        with TestClient(app) as tc:
-            res = tc.post(URL, json={"user_id": "u-1", "language": "en"}, headers=HEADERS)
-        assert res.status_code == 200
-        assert res.json()["signed_url"] == "wss://x"
-    finally:
-        get_settings.cache_clear()
+def test_tool_config_digest_is_canonical_and_sensitive_to_schema():
+    config = {"type": "client", "name": "list_specialties", "description": "á"}
+    assert voice_client.patient_tool_config_digest(
+        config
+    ) == voice_client.patient_tool_config_digest(dict(reversed(list(config.items()))))
+    assert voice_client.patient_tool_config_digest(
+        config
+    ) != voice_client.patient_tool_config_digest({**config, "parameters": {}})

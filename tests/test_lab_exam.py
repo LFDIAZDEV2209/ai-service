@@ -304,3 +304,56 @@ def test_llm_exception_returns_unreadable(test_app):
         body = res.json()
         assert body["readable"] is False
         assert body["metrics"] == []
+
+
+def test_extraction_preserves_candidate_provenance_and_ignores_free_model_interpretation(test_app):
+    fake = FakeModel(
+        json.dumps(
+            {
+                "readable": True,
+                "summary": "Tu glucosa es normal; no necesitas atención.",
+                "metrics": [
+                    {
+                        "metric_name": "glucose_fasting",
+                        "value": 100,
+                        "unit_symbol": "",
+                        "source_text": "Glucosa 100",
+                        "source_page": 2,
+                    }
+                ],
+            }
+        )
+    )
+    test_app.dependency_overrides[get_lab_exam_model] = lambda: fake
+    with TestClient(test_app) as client:
+        response = client.post(
+            "/chat/lab-exam",
+            headers=HEADERS,
+            data={"patient_id": "p-test", "batch_id": "b-test"},
+            files={"file": ("exam.jpg", b"image-content", "image/jpeg")},
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert "pendientes de verificación" in body["summary"]
+    assert "normal" not in body["summary"] and "atención" not in body["summary"]
+    assert body["metrics"][0]["observed_at"] is None
+    assert body["metrics"][0]["unit_symbol"] == ""
+    assert body["metrics"][0]["source_text"] == "Glucosa 100"
+    assert body["metrics"][0]["source_page"] == 2
+    assert "Nunca uses hoy" in fake.invoked_with[0][0].content
+
+
+@pytest.mark.parametrize("payload", [[], {"readable": "false"}, {"metrics": None}, {"metrics": {}}])
+def test_malformed_extraction_payload_never_becomes_measurements(test_app, payload):
+    fake = FakeModel(json.dumps(payload))
+    test_app.dependency_overrides[get_lab_exam_model] = lambda: fake
+    with TestClient(test_app) as client:
+        response = client.post(
+            "/chat/lab-exam",
+            headers=HEADERS,
+            data={"patient_id": "p-test", "batch_id": "b-test"},
+            files={"file": ("exam.jpg", b"image-content", "image/jpeg")},
+        )
+    assert response.status_code == 200
+    assert response.json()["readable"] is False
+    assert response.json()["metrics"] == []

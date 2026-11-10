@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.errors import ConfigError
@@ -50,14 +50,13 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o"
     openai_embedding_model: str = "text-embedding-3-small"
 
-    # Narración empática de exámenes de laboratorio — endpoint /chat/lab-exam/narrate.
-    # Tier económico dedicado (gpt-4o-mini), separado del modelo de extracción.
+    # Compatibilidad de configuración histórica: /chat/lab-exam/narrate ahora es
+    # determinista y NO consume estos parámetros ni llama al proveedor.
     empathetic_provider: str = "openai"
     empathetic_model: str = "gpt-4o-mini"
     empathetic_temperature: float = 0.5
     empathetic_max_tokens: int = 400
-    # Timeout de la llamada LLM única de narración; cualquier fallo degrada a 200
-    # con `empathetic_message` vacío (nunca 5xx por problemas de narración).
+    # Reservado para compatibilidad; sin efecto en la narración actual.
     empathetic_timeout: float = 20.0
 
     # Agente
@@ -106,6 +105,13 @@ class Settings(BaseSettings):
     # contra la misma región que el agente, si no el OAuth/WS falla).
     elevenlabs_base_url: str = "https://api.elevenlabs.io"
     voice_enabled: bool = False
+    # Versiones publicadas e inmutables, una por idioma. Sin versión verificada
+    # no se emite ninguna credencial de voz; no hay fallback al agente mutable.
+    elevenlabs_patient_version_es: str | None = None
+    elevenlabs_patient_version_en: str | None = None
+    # JSON {tool_id: SHA256(tool_config canónico)} aprobado por el responsable.
+    # No hay IDs implícitamente confiables ni herramientas de servidor permitidas.
+    elevenlabs_patient_tool_config_sha256: dict[str, str] = Field(default_factory=dict)
     # Timeout de la llamada a ElevenLabs al emitir una sesión (signed URL).
     elevenlabs_timeout: float = 10.0
 

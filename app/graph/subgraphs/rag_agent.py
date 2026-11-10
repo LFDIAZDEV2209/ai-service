@@ -17,6 +17,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
+from app.agents.prompts import PATIENT_SCOPE_POLICY
 from app.llm.factory import get_chat_model
 from app.rag.retriever import Retriever
 
@@ -49,6 +50,7 @@ def _make_retrieve_node(retriever: Retriever):
 def _make_answer_node(model: BaseChatModel):
     def answer(state: RagState) -> dict:
         messages = [
+            SystemMessage(content=PATIENT_SCOPE_POLICY),
             SystemMessage(content=RAG_SYSTEM_PROMPT),
             HumanMessage(
                 content=(f"Contexto:\n{state.get('context', '')}\n\nPregunta: {state['question']}")

@@ -1,8 +1,8 @@
 """Tests del idioma explícito por turno (`ChatRequest.language`).
 
 Cubre:
-- Comportamiento byte-idéntico al actual cuando `language` está ausente o es
-  desconocido (prompt y respuesta iguales, sin bloque de idioma).
+- Sin bloque de idioma cuando `language` está ausente o es desconocido;
+  el alcance educativo permanece presente.
 - Inyección del bloque de idioma (`build_language_instruction`) como
   SystemMessage extra cuando el frontend envía `language` ('es' | 'en').
 - Normalización de la señal (mayúsculas/espacios; valor inválido → None).
@@ -14,6 +14,8 @@ Todo con modelos fake (sin API keys), patrón de test_program_controls.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, SystemMessage
@@ -21,7 +23,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.agents.prompts import (
     BASE_SYSTEM_PROMPT,
-    PRACTICAL_SYMPTOM_GUIDANCE,
+    PATIENT_SCOPE_POLICY,
     build_language_instruction,
 )
 from app.api.deps import get_db_session, get_graph
@@ -62,7 +64,7 @@ def recording_client():
     app.dependency_overrides.clear()
 
 
-# --- (a) Regresión: sin language, comportamiento byte-idéntico ----------------
+# --- (a) Regresión: sin language, sin bloque opcional ----------------
 
 
 def test_absent_language_keeps_default_language_and_symptom_guidance(recording_client):
@@ -74,9 +76,9 @@ def test_absent_language_keeps_default_language_and_symptom_guidance(recording_c
     # Sin señal de idioma: sistema base, guía de síntomas y mensaje humano.
     assert len(fake.prompts) == 1
     prompt = fake.prompts[0]
-    assert [type(m).__name__ for m in prompt] == ["SystemMessage", "SystemMessage", "HumanMessage"]
-    assert prompt[0].content == BASE_SYSTEM_PROMPT
-    assert prompt[1].content == PRACTICAL_SYMPTOM_GUIDANCE
+    assert [type(m).__name__ for m in prompt] == ["SystemMessage", "HumanMessage", "HumanMessage"]
+    assert prompt[0].content == PATIENT_SCOPE_POLICY
+    assert json.loads(prompt[1].content.split("\n", 1)[1])["profile"] == BASE_SYSTEM_PROMPT
     assert prompt[-1].content == "hola"
 
 
@@ -89,7 +91,7 @@ def test_unknown_language_is_ignored(recording_client, raw):
     assert len(fake.prompts) == 1
     assert [type(m).__name__ for m in fake.prompts[0]] == [
         "SystemMessage",
-        "SystemMessage",
+        "HumanMessage",
         "HumanMessage",
     ]
 
@@ -111,7 +113,7 @@ def test_language_injects_block(recording_client, lang, expected):
 
     prompt = fake.prompts[0]
     # El bloque base permanece intacto y el idioma es un SystemMessage extra.
-    assert prompt[0].content == BASE_SYSTEM_PROMPT
+    assert prompt[0].content == PATIENT_SCOPE_POLICY
     assert any(isinstance(m, SystemMessage) and m.content == expected for m in prompt)
 
 

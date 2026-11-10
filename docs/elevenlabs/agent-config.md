@@ -1,5 +1,10 @@
 # Configuración de los agentes ElevenLabs (FASE 6–10)
 
+> **Alcance vigente de primera publicación:** leer
+> [VITA_PATIENT_SCOPE.md](../VITA_PATIENT_SCOPE.md) antes de configurar/desplegar.
+> Las referencias siguientes a prompt clínico, PATCH de idioma y E2E corresponden
+> al historial previo; no acreditan las nuevas versiones ES/EN ni sus herramientas.
+
 > **Migración de cuenta (2026-10-01):** Luis cambió de cuenta ElevenLabs. La
 > configuración del agente anterior (`agent_4501m3qqzq0ne7qtpcf3p2wkec1a`,
 > workspace de diazf7583@gmail.com) se rescató vía hosted MCP ANTES del logout
