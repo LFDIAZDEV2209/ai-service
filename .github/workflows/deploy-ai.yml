@@ -24,7 +24,7 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         # Mismas credenciales que DATABASE_URL del step de tests (abajo):
@@ -77,7 +77,7 @@ jobs:
 
   deploy:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -91,12 +91,35 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Mismo camino de exportación que el backend: imagen local de una sola
+      # plataforma y push clásico con el rol OIDC existente. Ubuntu-latest pasó
+      # a Ubuntu26 y el build directo añadió un índice/attestation cuyo HEAD
+      # recibió 403 en ECR antes de registrar una task definition (42911935083).
       - name: Build imagen (${{ github.sha }})
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          provenance: false
+          platforms: linux/amd64
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+
+      - name: Verificar imagen local antes de publicar
+        shell: bash
         run: |
-          docker build \
-            -t "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}" \
-            -t "${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest" \
-            .
+          IMAGE="${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+          PLATFORM=$(docker image inspect "$IMAGE" --format '{{.Os}}/{{.Architecture}}')
+          if [ "$PLATFORM" != "linux/amd64" ]; then
+            echo "::error::La imagen local no corresponde a linux/amd64"
+            exit 1
+          fi
+          docker info --format 'Docker store: {{.Driver}} {{json .DriverStatus}}'
 
       - name: Push ECR
         run: |

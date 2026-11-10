@@ -69,3 +69,22 @@ separado con tag `prod` vía MCP — NO reutilizar el de dev); `VOICE_ENABLED=tr
   `ELEVENLABS_AGENT_ID` en Secrets Manager; el endpoint solo emite
   sesiones para el agent_id configurado (allowlist implícita).
 - Nunca apuntar dev a prod: la config por entorno define agente y key.
+
+## Publicación de la imagen del AI Service en ECR
+
+El workflow `deploy-ai.yml` usa `ubuntu-24.04`, Buildx con `load: true` y una imagen
+`linux/amd64` sin índice de provenance; publica los tags SHA/latest con `docker push`
+clásico, igual que el backend. Verifica que la imagen local existe y tiene la
+plataforma correcta antes de publicarla. Las credenciales siguen siendo OIDC y
+no se amplían permisos IAM.
+
+El run 42911935083 falló después de cargar capas: Ubuntu-latest había cambiado
+a Ubuntu26/Docker29 y el HEAD de un manifest de attestation recibió 403. No llegó
+a registrar ni activar una task definition. Un 403 no se considera transitorio
+ni autoriza repetir el despliegue ciegamente. Si vuelve a fallar el manifest HEAD,
+comprobar la política del rol: AWS incluye `ecr:BatchGetImage` en los permisos
+de push por repositorio. La corrección IAM, si corresponde, debe limitarse al
+repositorio `cooppadresd-ai`; no añadir permisos globales como solución.
+
+Fuentes: [permisos ECR de AWS](https://docs.aws.amazon.com/AmazonECR/latest/userguide/image-push-iam.html)
+y [cambio de Docker/containerd](https://github.com/moby/moby/issues/51532).
