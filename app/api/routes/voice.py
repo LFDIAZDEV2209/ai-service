@@ -58,12 +58,17 @@ async def create_voice_session(payload: VoiceSessionRequest) -> VoiceSessionResp
         if language == "en"
         else settings.elevenlabs_patient_version_es
     )
-    if not version_id or not version_id.startswith("agtvrsn_"):
+    if settings.voice_review_verification_enabled and (
+        not version_id or not version_id.startswith("agtvrsn_")
+    ):
         raise HTTPException(status_code=503, detail="La voz no está disponible en este momento.")
     try:
-        await verify_patient_voice_version(
-            settings, settings.elevenlabs_agent_id, version_id, language
-        )
+        if settings.voice_review_verification_enabled:
+            await verify_patient_voice_version(
+                settings, settings.elevenlabs_agent_id, version_id, language
+            )
+        else:
+            version_id = None
         session = await create_signed_url(settings, settings.elevenlabs_agent_id, version_id)
     except VoiceSessionError as exc:
         # Mapeo a HTTP: el detalle interno quedó logueado en el cliente.

@@ -1,3 +1,9 @@
+> TestFlight restaurado: `VOICE_REVIEW_VERIFICATION_ENABLED=false` por defecto
+> utiliza el agente ElevenLabs configurado, sin exigir los pins pendientes del
+> proceso de revisión. No modifica el agente remoto. `VOICE_ENABLED`, credenciales
+> del proveedor y autenticación interna siguen siendo obligatorios. Activar la
+> verificación al retomar revisión requiere configurar versiones y herramientas.
+
 # Configuración de los agentes ElevenLabs (FASE 6–10)
 
 > **Alcance vigente de primera publicación:** leer

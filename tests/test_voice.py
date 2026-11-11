@@ -36,6 +36,7 @@ def _configuration(language):
 def controlled_settings(monkeypatch):
     monkeypatch.setenv("AUTO_MIGRATE", "false")
     monkeypatch.setenv("VOICE_ENABLED", "true")
+    monkeypatch.setenv("VOICE_REVIEW_VERIFICATION_ENABLED", "true")
     monkeypatch.setenv("ELEVENLABS_API_KEY", "sk_test_no_real")
     monkeypatch.setenv("ELEVENLABS_AGENT_ID", "agent_test")
     monkeypatch.setenv("ELEVENLABS_BASE_URL", "https://api.elevenlabs.test")
@@ -312,3 +313,25 @@ def test_tool_config_digest_is_canonical_and_sensitive_to_schema():
     assert voice_client.patient_tool_config_digest(
         config
     ) != voice_client.patient_tool_config_digest({**config, "parameters": {}})
+
+
+def test_restored_voice_uses_configured_agent_without_review_pins(monkeypatch):
+    monkeypatch.setenv("VOICE_REVIEW_VERIFICATION_ENABLED", "false")
+    monkeypatch.delenv("ELEVENLABS_PATIENT_VERSION_ES", raising=False)
+    monkeypatch.delenv("ELEVENLABS_PATIENT_VERSION_EN", raising=False)
+    get_settings.cache_clear()
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        assert request.url.path == "/v1/convai/conversation/get-signed-url"
+        assert request.url.params["agent_id"] == "agent_test"
+        assert "version_id" not in request.url.params
+        return httpx.Response(200, json={"signed_url": "wss://synthetic.invalid/session"})
+
+    _transport(monkeypatch, handler)
+    response = _post()
+    assert response.status_code == 200
+    assert len(calls) == 1
+    assert _post(headers={}).status_code in (401, 403)
+    assert len(calls) == 1

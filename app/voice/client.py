@@ -56,7 +56,7 @@ class VoiceSessionError(Exception):
 async def create_signed_url(
     settings: Settings,
     agent_id: str,
-    version_id: str,
+    version_id: str | None = None,
 ) -> dict[str, str | None]:
     """Emite un signed URL de vida corta contra ElevenLabs.
 
@@ -78,7 +78,7 @@ async def create_signed_url(
             # esta sesión (trazabilidad); el signed URL no es reutilizable.
             "include_conversation_id": "true",
             # La credencial queda vinculada a la versión que acaba de verificarse.
-            "version_id": version_id,
+            **({"version_id": version_id} if version_id else {}),
         }
     )
     url = f"{settings.elevenlabs_base_url.rstrip('/')}{_GET_SIGNED_URL_PATH}?{query}"

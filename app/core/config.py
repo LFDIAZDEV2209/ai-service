@@ -113,6 +113,8 @@ class Settings(BaseSettings):
     # contra la misma región que el agente, si no el OAuth/WS falla).
     elevenlabs_base_url: str = "https://api.elevenlabs.io"
     voice_enabled: bool = False
+    # La verificación adicional de revisión se activa al retomar App Store.
+    voice_review_verification_enabled: bool = False
     # Versiones publicadas e inmutables, una por idioma. Sin versión verificada
     # no se emite ninguna credencial de voz; no hay fallback al agente mutable.
     elevenlabs_patient_version_es: str | None = None
