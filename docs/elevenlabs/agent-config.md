@@ -49,13 +49,38 @@ ambos agentes (dev `agtvrsn_4101m6rqw7gqfaa8crjtrkc1d07b`, prod `agtvrsn_9101m6r
 - **Rollback**: reponer `model_id eleven_flash_v2_5`, `stability 0.5`, y la
   regla 6 sin la cláusula de naturalidad (histórico en versiones del agente).
 
+## Respuesta fluida (2026-11-08) — reasoning medium → low en ambos agentes
+
+Síntoma en demo: el agente demoraba mucho en empezar a hablar. Analytics del
+agente prod (`agents_query_analytics` metric latency): TTS sano
+(`TTS_SERVICE_TTFB` ~0.08 s, VAD ~0.3 s); el problema era **`LLM_SERVICE_TTFB`**
+— history ~1.1-1.9 s y hoy colas de 4.9-8.6 s p95 (17:00Z un turno de 8.63 s) +
+`LLM_CASCADE_FALLBACK_USED` desde gemini-3.5-flash (degradación del proveedor).
+Con la migración owner → `gemini-3.8-flash` el agente quedó
+implícitamente con `reasoning_effort medium`, que mete "pensamiento" antes del
+primer token.
+
+- **Fix**: `agents_update_prompt_settings` con `reasoning_effort: low` en prod
+  (`agtvrsn_7101m6y5mk8qfyt8f58aa0aq1d3k`) y dev (tras migrar su LLM
+  2.5-flash → 3.8-flash + low en el mismo PATCH). Prompt/tools/temperatura 0.4
+  intactos (verificados vía agents_get).
+- `service_tier "fast"` NO es soportado por gemini-3.8-flash (400) — tier queda
+  `standard`. `enable_reasoning_summary` queda false (ya estaba).
+- Si la latencia vuelve a degradarse (provider-side), palanca siguiente:
+  bajar a `reasoning_effort: none` o cambiar LLM a `gemini-3.5-flash` /
+  `gemini-3.7-flash`. Los changes de config aplican a la SIGUIENTE sesión
+  (las en vuelo conservan la config con la que abrieron).
+- Rollback: `reasoning_effort: medium`; dev además volver a `gemini-2.5-flash`.
+
 ## Config compartida (verificada post-creación vía agents_get)
 
 - Idioma `es` (fallback estático; desde 2026-10-19 el idioma real de cada
   sesión se fija por PATCH por sesión) — el prompt ya NO fuerza espejo
   (`language_detection` sigue activa como tool del sistema).
-- LLM `gemini-2.5-flash`, `temperature 0.4` (estabilidad anti-babbling; ver
-  fix del 2026-09-29 más abajo).
+- LLM `gemini-3.8-flash` + `reasoning_effort low` (desde 2026-11-08; ver
+  "Respuesta fluida" abajo; `gemini-2.5-flash` quedó deprecated y lo migró el
+  owner desde el dashboard el 2026-11-07), `temperature 0.4` intacta
+  (estabilidad anti-babbling; ver fix del 2026-09-29 más abajo).
 - TTS `eleven_v4_turbo` (desde 2026-11-06; antes `eleven_flash_v2_5`),
   `agent_output_audio_format pcm_16000`, `stability 0.35`. Ver sección
   "Voz más humana" arriba.
