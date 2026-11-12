@@ -70,3 +70,34 @@ def test_politica_de_turno_default_conserva_agendamiento():
     # La app móvil mantiene el comportamiento actual (compatibilidad).
     assert "contactar o agendar" in build_turn_policy("es")
     assert "contact or book" in build_turn_policy("en")
+
+
+def test_tools_de_perfiles_existen_en_el_registro():
+    from app.agents.registry import AGENTS
+    from app.tools.registry import TOOLS_BY_NAME
+
+    for key, profile in AGENTS.items():
+        for name in profile.tools:
+            assert name in TOOLS_BY_NAME, f"{key}: tool '{name}' no existe en el registro"
+
+
+async def test_grafo_resuelve_tools_por_nombre_a_objetos():
+    """Regresión: el perfil whatsapp declara tools por nombre; bind_tools exige
+    BaseTool. El proveedor real rechaza strings ("Unsupported function")."""
+    from langchain_core.messages import AIMessage
+    from langgraph.checkpoint.memory import MemorySaver
+
+    from app.graph.graph import build_graph
+    from tests.fakes import StrictBindFakeModel
+
+    model = StrictBindFakeModel(responses=[AIMessage(content="Hola, ¿en qué te ayudo?")])
+
+    async def resolve(_):
+        return get_agent_profile("whatsapp")
+
+    graph = build_graph(model=model, checkpointer=MemorySaver(), profile_resolver=resolve)
+    result = await graph.ainvoke(
+        {"input": "Hola", "messages": []},
+        config={"configurable": {"thread_id": "whatsapp-tools-regression"}},
+    )
+    assert "Hola" in result["messages"][-1].content

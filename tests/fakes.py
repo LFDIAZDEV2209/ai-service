@@ -65,6 +65,24 @@ class RecordingFakeModel(FakeToolAwareModel):
         return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
 
 
+class StrictBindFakeModel(FakeToolAwareModel):
+    """FakeToolAwareModel que reproduce la validación real del proveedor.
+
+    Los proveedores reales (Anthropic/OpenAI) rechazan `bind_tools` si reciben
+    strings en vez de BaseTool ("Unsupported function"). Este fake falla igual
+    para que un perfil con tools por nombre sin resolver reviente en tests y
+    no en producción.
+    """
+
+    def bind_tools(self, tools, *, tool_choice=None, **kwargs):
+        from langchain_core.tools import BaseTool
+
+        invalid = [tool for tool in tools if not isinstance(tool, BaseTool)]
+        if invalid:
+            raise ValueError(f"Unsupported function: {invalid[0]!r}")
+        return super().bind_tools(tools, tool_choice=tool_choice, **kwargs)
+
+
 class FakeStructuredModel:
     """Modelo fake mínimo para `with_structured_output` (sin LangChain fake).
 

@@ -27,7 +27,7 @@ from app.graph.state import AgentState
 from app.memory.adaptive import AdaptiveMemoryService
 from app.memory.service import UserMemoryService
 from app.safety.guardrails import check_input_guardrails
-from app.tools.registry import ALL_TOOLS
+from app.tools.registry import ALL_TOOLS, TOOLS_BY_NAME
 
 
 def guardrails_node(state: AgentState) -> dict:
@@ -123,7 +123,22 @@ def make_agent_node(
         active_prompt = profile.system_prompt if profile else system_prompt
         # El contexto del paciente se ofrece por perfil o selección explícita, nunca por defecto.
         default_tools = [tool for tool in ALL_TOOLS if tool.name != "get_patient_data"]
-        active_tools = profile.tools if profile and profile.tools else (tools or default_tools)
+        # Los perfiles declaran tools por NOMBRE (registry/resolver); el grafo
+        # puede inyectar objetos. bind_tools exige BaseTool: un string llega a
+        # Anthropic como "Unsupported function" y tumba el turno.
+        selected = profile.tools if profile and profile.tools else (tools or default_tools)
+        active_tools = []
+        for item in selected:
+            if isinstance(item, BaseTool):
+                active_tools.append(item)
+                continue
+            tool = TOOLS_BY_NAME.get(item)
+            if tool is None:
+                raise ValueError(
+                    f"Tool '{item}' desconocida para el perfil activo. "
+                    f"Disponibles: {sorted(TOOLS_BY_NAME)}"
+                )
+            active_tools.append(tool)
         active_tools = [*active_tools, *(profile.extra_tools if profile else ())]
         active_model = model.bind_tools(active_tools)
 
