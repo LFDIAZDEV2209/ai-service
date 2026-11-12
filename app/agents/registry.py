@@ -16,6 +16,7 @@ from app.agents.prompts import (
     MEDICAL_SYSTEM_PROMPT,
     NUTRITION_SYSTEM_PROMPT,
     PSYCHOLOGY_SYSTEM_PROMPT,
+    WHATSAPP_SYSTEM_PROMPT,
 )
 
 
@@ -55,6 +56,16 @@ AGENTS: dict[str, AgentProfile] = {
         name="Especialista en Salud Mental",
         description="Responde consultas de bienestar emocional y salud mental.",
         system_prompt=PSYCHOLOGY_SYSTEM_PROMPT,
+    ),
+    # Canal WhatsApp: mensajería breve SIN agendamiento de citas (la gestión
+    # con profesionales vive en la app). Tools mínimas: sin suggest_appointment
+    # ni mark_control_declined (ambas son del flujo de la app móvil).
+    "whatsapp": AgentProfile(
+        key="whatsapp",
+        name="Asistente WhatsApp",
+        description="Asistente del canal WhatsApp: educación en salud sin agendamiento.",
+        system_prompt=WHATSAPP_SYSTEM_PROMPT,
+        tools=("calculate", "get_current_time"),
     ),
 }
 

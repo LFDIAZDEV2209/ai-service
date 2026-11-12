@@ -71,6 +71,51 @@ emergencias/SOS sin demoras, sin asegurar un diagnóstico ni atención ya enviad
 """
 
 
+def _build_whatsapp_scope_policy() -> str:
+    """Variante del alcance para el canal WhatsApp.
+
+    Difiere del alcance de la app en dos puntos: NO se ofrece agendar (la
+    gestión y las citas con los profesionales viven en la app ANTARES) y el
+    cierre lo dice explícitamente. La sustitución es literal sobre el alcance
+    canónico; los tests fijan ambas frases para detectar derivas del texto.
+    """
+    return PATIENT_SCOPE_POLICY.replace(
+        "- Help contact or book the healthcare team with the available appointment tools;\n"
+        "  require the user's explicit confirmation before creating, changing or "
+        "cancelling a booking.\n",
+        "- Do not book, promise or offer appointments in this channel: the ANTARES app is\n"
+        "  the place to contact or book the healthcare team. Point the patient there.\n",
+    ).replace(
+        "Never offer a live human-chat transfer that the app does not provide; healthcare\n"
+        "professionals and appointments remain available through the app.",
+        "Never offer a live human-chat transfer that the app does not provide; the ANTARES\n"
+        "app is the place for healthcare professionals and appointments, not this chat.",
+    )
+
+
+WHATSAPP_SCOPE_POLICY = _build_whatsapp_scope_policy()
+
+WHATSAPP_SYSTEM_PROMPT = """Eres Vita, asistente de Copp Adresd, atendiendo por WhatsApp.
+Ayuda con educación general en salud, hábitos cotidianos y seguimiento de planes ya
+aprobados por el equipo. No eres un profesional clínico. Usa el idioma indicado por
+la app o el del usuario. Sé clara, cálida y breve, y no inventes datos ni fuentes.
+Cita las fuentes recuperadas cuando las uses.
+
+Este canal NO agenda, coordina ni promete citas o consultas: nunca las ofrezcas
+aunque el usuario lo pida. La comunicación y las citas con sus profesionales de
+salud se hacen desde la app ANTARES. No prometas un canal de chat humano que no
+existe. Las urgencias requieren contactar emergencias/SOS sin demoras, sin asegurar
+un diagnóstico ni atención ya enviada.
+
+FORMATO DEL MENSAJE (WhatsApp):
+- Negrita SOLO con asteriscos simples: *texto* (nunca **texto** ni __texto__).
+- NO uses separadores de línea (---, ***, ___), encabezados markdown (#), tablas
+  ni bloques de código para texto normal.
+- Para listas usa guiones (-) con una línea en blanco entre bloques.
+- Respuestas breves y conversacionales: es un chat de mensajería, no un documento.
+"""
+
+
 def _specialized_prompt(especialidad: str, reglas: str) -> str:
     """El tema cambia el vocabulario, nunca el alcance del asistente del paciente."""
     return f"{BASE_SYSTEM_PROMPT}\nTema de referencia: {especialidad}.\n{reglas}"
@@ -195,16 +240,30 @@ def build_language_instruction(language: str) -> str:
     )
 
 
-def build_turn_policy(language: str) -> str:
-    """Aclara el canal del asistente sin negar la atención del equipo clínico."""
+def build_turn_policy(language: str, allow_appointment: bool = True) -> str:
+    """Aclara el canal del asistente sin negar la atención del equipo clínico.
+
+    `allow_appointment=False` (canal WhatsApp) elimina la mención de agendar:
+    ese canal no ofrece citas y el paciente se orienta a la app.
+    """
     if language == "en":
+        closing = (
+            "Help the patient contact or book their healthcare professionals through the app."
+            if allow_appointment
+            else "This channel does not offer booking: help the patient reach their healthcare "
+            "professionals through the app."
+        )
         return (
             "SERVICE POLICY: Vita is an AI educational assistant, not the healthcare team. "
-            "Do not offer a live human-chat transfer: this channel is not provided. "
-            "Help the patient contact or book their healthcare professionals through the app."
+            "Do not offer a live human-chat transfer: this channel is not provided. " + closing
         )
+    closing = (
+        "Ayuda al paciente a contactar o agendar con sus profesionales mediante la app."
+        if allow_appointment
+        else "Este canal no agenda citas: ayuda al paciente a comunicarse con sus "
+        "profesionales de salud desde la app."
+    )
     return (
         "POLÍTICA DE SERVICIO: Vita es una asistente educativa con IA, no el equipo clínico. "
-        "No ofrezcas transferir el chat a un humano: ese canal no está disponible. "
-        "Ayuda al paciente a contactar o agendar con sus profesionales mediante la app."
+        "No ofrezcas transferir el chat a un humano: ese canal no está disponible. " + closing
     )

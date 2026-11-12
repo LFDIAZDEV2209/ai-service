@@ -6,7 +6,11 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 
-from app.agents.prompts import PATIENT_SCOPE_POLICY, build_patient_voice_prompt
+from app.agents.prompts import (
+    PATIENT_SCOPE_POLICY,
+    WHATSAPP_SCOPE_POLICY,
+    build_patient_voice_prompt,
+)
 from app.agents.registry import AGENTS
 from app.agents.runtime_registry import AgentRuntimeRegistry
 from app.graph.graph import build_graph
@@ -27,7 +31,10 @@ async def test_every_builtin_patient_profile_keeps_code_owned_system_scope(profi
         config={"configurable": {"thread_id": profile.key}},
     )
     messages = model.prompts[0]
-    assert messages[0] == SystemMessage(content=PATIENT_SCOPE_POLICY)
+    # Alcance code-owned por canal: WhatsApp usa su variante sin agendamiento,
+    # el resto de perfiles el alcance canónico de la app.
+    expected_scope = WHATSAPP_SCOPE_POLICY if profile.key == "whatsapp" else PATIENT_SCOPE_POLICY
+    assert messages[0] == SystemMessage(content=expected_scope)
     reference_message = next(
         message
         for message in messages

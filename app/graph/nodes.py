@@ -16,6 +16,7 @@ from langgraph.types import Overwrite
 from app.agents.prompts import (
     BASE_SYSTEM_PROMPT,
     PATIENT_SCOPE_POLICY,
+    WHATSAPP_SCOPE_POLICY,
     build_control_guidance,
     build_language_instruction,
     build_turn_policy,
@@ -134,7 +135,12 @@ def make_agent_node(
             else message
             for message in history
         ]
-        system_blocks = [PATIENT_SCOPE_POLICY]
+        system_blocks = [
+            # Alcance por canal: WhatsApp no ofrece agendamiento, la app sí.
+            WHATSAPP_SCOPE_POLICY
+            if profile is not None and profile.key == "whatsapp"
+            else PATIENT_SCOPE_POLICY
+        ]
         references = {"profile": active_prompt}
 
         # Memoria de largo plazo como datos de referencia de menor prioridad
@@ -174,7 +180,12 @@ def make_agent_node(
             # humanos (cubre agentes especializados y sincronizados de BD que
             # no traen la regla 9 del prompt base) — evita que la oferta de
             # un agente humano rompa la consistencia de idioma.
-            system_blocks.append(build_turn_policy(language))
+            system_blocks.append(
+                build_turn_policy(
+                    language,
+                    allow_appointment=not (profile is not None and profile.key == "whatsapp"),
+                )
+            )
 
         prompt = [
             *[SystemMessage(content=block) for block in system_blocks],
