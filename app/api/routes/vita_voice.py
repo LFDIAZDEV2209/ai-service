@@ -20,7 +20,7 @@ from app.api.message_text import extract_message_text
 from app.api.routes.chat import _build_config, _check_rate_limit, _extract_answer
 from app.api.schemas import ChatRequest
 from app.core.config import get_settings
-from app.history.service import history_service
+from app.history.service import history_service, storage_key
 from app.vita.client import VitaAccessError, read_catalog
 from app.vita.locking import ThreadBusyError, thread_guard
 from app.vita.runtime import resolve_turn
@@ -156,7 +156,7 @@ async def completion(
         await read_catalog(record.user_id)
         _check_rate_limit(http_request, record.user_id)
         ordinal, prefix, previous = history_identity(payload.messages)
-        switch = language_switch(payload.messages, payload.tools, record.language)
+        switch = language_switch(payload.messages, payload.tools)
         if switch:
 
             async def switch_language():
@@ -174,10 +174,18 @@ async def completion(
                         }
                     ],
                 }
-                yield f"data: {json.dumps(data)}\n\n"
-                data["choices"] = [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]
-                yield f"data: {json.dumps(data)}\n\n"
-                yield "data: [DONE]\n\n"
+                try:
+                    async with thread_guard(storage_key(record.user_id, record.thread_id)):
+                        await history_service.ensure_locked(
+                            record.user_id, record.thread_id, base_graph.checkpointer
+                        )
+                        await voice_store.get(session_id)
+                        yield f"data: {json.dumps(data)}\n\n"
+                        data["choices"] = [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]
+                        yield f"data: {json.dumps(data)}\n\n"
+                        yield "data: [DONE]\n\n"
+                except (VoiceContextError, ThreadBusyError):
+                    yield 'data: {"error":{"code":"voice_turn_interrupted"}}\n\n'
 
             return StreamingResponse(
                 switch_language(),

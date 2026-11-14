@@ -120,13 +120,16 @@ def detect_turn_language(state: AgentState) -> Literal["en", "es"] | None:
     text = re.sub(
         r'"[^"\n]{2,180}"|“[^”\n]{2,180}”|(?<!\w)\x27[^\x27\n]{2,180}\x27(?!\w)', " ", text
     )
+    preference_text = "".join(
+        char for char in unicodedata.normalize("NFD", text) if unicodedata.category(char) != "Mn"
+    )
     preference = re.search(
-        r"\b(?:h[aá]bla(?:me)?|responde(?:me)?|contesta(?:me)?|speak|answer|respond)\s+"
-        r"(?:(?:to me|en|in)\s+)*(ingl[eé]s|english|espanol|español|spanish)\b",
-        text,
+        r"\b(?:habla(?:me)?|responde(?:me)?|contesta(?:me)?|speak|answer|respond)\s+"
+        r"(?:(?:to me|en|in)\s+)*(ingles|english|espanol|spanish)\b",
+        preference_text,
     )
     if preference:
-        return "en" if preference[1] in {"ingles", "inglés", "english"} else "es"
+        return "en" if preference[1] in {"ingles", "english"} else "es"
     tokens = re.findall(r"[^\W\d_]+", text)
     if not tokens:
         return None

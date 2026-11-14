@@ -19,7 +19,7 @@ def conversation_language(messages, initial: str) -> str:
     return current
 
 
-def language_switch(messages, tools: list[dict[str, Any]], initial: str) -> str | None:
+def language_switch(messages, tools: list[dict[str, Any]]) -> str | None:
     """Decide ES/EN con el texto, sin confiar en prompts ni argumentos del proveedor.
 
     ElevenLabs devuelve el resultado de language_detection antes de solicitar
@@ -32,7 +32,10 @@ def language_switch(messages, tools: list[dict[str, Any]], initial: str) -> str 
         for tool in tools
     ):
         return None
-    current = initial
+    # El idioma de la app es una preferencia, no prueba del estado de ElevenLabs.
+    # Confirmar el primer idioma claro evita que un override ausente o antiguo
+    # mantenga TTS en otro idioma. No requiere un planificador LLM.
+    current = None
     for message in messages:
         for call in message.tool_calls:
             function = call.get("function", {})

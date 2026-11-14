@@ -107,7 +107,9 @@ def rig(monkeypatch):
     monkeypatch.setattr(vita_voice, "voice_store", store)
     monkeypatch.setattr("app.api.routes.voice.voice_store", store)
     monkeypatch.setattr(vita_voice, "read_catalog", AsyncMock(return_value=[]))
-    history = SimpleNamespace(prepare_turn=AsyncMock(), before_turn_locked=AsyncMock())
+    history = SimpleNamespace(
+        prepare_turn=AsyncMock(), before_turn_locked=AsyncMock(), ensure_locked=AsyncMock()
+    )
     monkeypatch.setattr(vita_voice, "history_service", history)
 
     @asynccontextmanager
@@ -168,6 +170,27 @@ async def post(rig, payload=None, headers=None):
 
 
 LANGUAGE_TOOLS = [{"type": "function", "function": {"name": "language_detection"}}]
+
+
+async def test_app_language_is_not_assumed_to_be_the_providers_actual_language(rig):
+    rig.store.record.language = "en"
+    response = await post(rig, body("What is my assigned lunch?", tools=LANGUAGE_TOOLS))
+    assert response.status_code == 200 and "language_detection" in response.text
+    assert not rig.store.receipts
+    rig.resolver.assert_not_awaited()
+
+
+async def test_language_switch_cannot_emit_after_concurrent_revocation(rig):
+    async def revoked_during_catalog(_):
+        rig.store.record.revoked = True
+        return []
+
+    rig.monkeypatch.setattr(vita_voice, "read_catalog", revoked_during_catalog)
+    response = await post(rig, body("What is my assigned lunch?", tools=LANGUAGE_TOOLS))
+    assert response.status_code == 200
+    assert "voice_turn_interrupted" in response.text and "language_detection" not in response.text
+    assert not rig.store.receipts
+    rig.resolver.assert_not_awaited()
 
 
 async def test_history_cleanup_rejects_voice_before_generation(rig):
@@ -267,6 +290,8 @@ async def test_only_language_tool_result_can_complete_a_provider_function_roundt
         ('Using the document "Las heridas de la infancia", what are its main ideas?', "en"),
         ("According to 'Mapa de la conciencia', what does the author explain?", "en"),
         ("Responde en inglés", "en"),
+        ("Respóndeme en inglés", "en"),
+        ("Contéstame en inglés", "en"),
         ("Please speak in Spanish", "es"),
     ],
 )
