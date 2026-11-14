@@ -345,13 +345,16 @@ async def completion(
                     await voice_store.finish_turn(session_id, ordinal, "interrupted")
             logger.info(
                 "vita_voice_turn agent=%s version=%s reason=%s "
-                "first_token_ms=%s duration_ms=%s status=%s",
+                "first_token_ms=%s duration_ms=%s status=%s tools=%s source_count=%s language=%s",
                 turn.agent_id,
                 turn.version_id,
                 turn.reason,
                 first_token_ms,
                 int((time.perf_counter() - started) * 1000),
                 "generated" if completed else "interrupted",
+                (state or {}).get("tools_used", []),
+                len((state or {}).get("data_sources", [])),
+                request.language,
             )
 
     return StreamingResponse(
