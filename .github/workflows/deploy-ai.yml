@@ -139,11 +139,21 @@ jobs:
             .containerDefinitions[0].image = $img |
               .containerDefinitions[0].environment = ([
               .containerDefinitions[0].environment[]?
-              | select(.name != "BACKEND_BASE_URL" and .name != "VITA_RUNTIME_ENABLED" and .name != "VITA_TRANSCRIPT_SYNC_ENABLED")
+              | select(.name != "BACKEND_BASE_URL" and .name != "VITA_RUNTIME_ENABLED" and .name != "VITA_TRANSCRIPT_SYNC_ENABLED" and .name != "VITA_ELEVENLABS_AGENT_ID" and .name != "VITA_ELEVENLABS_VERSION_ID" and .name != "VITA_VOICE_ENABLED")
             ] + [
               {"name": "BACKEND_BASE_URL", "value": "http://internal-cooppadresd-alb-internal-1395345436.us-east-2.elb.amazonaws.com"},
               {"name": "VITA_RUNTIME_ENABLED", "value": "true"},
-              {"name": "VITA_TRANSCRIPT_SYNC_ENABLED", "value": "true"}
+              {"name": "VITA_TRANSCRIPT_SYNC_ENABLED", "value": "true"},
+              {"name": "VITA_ELEVENLABS_AGENT_ID", "value": "agent_5501m7dgvbpff26b1nk5s73qx4kf"},
+              {"name": "VITA_ELEVENLABS_VERSION_ID", "value": "agtvrsn_8001m7dgvcp9fmftcphr1cky9pwe"},
+              {"name": "VITA_VOICE_ENABLED", "value": "false"}
+            ]) |
+              .containerDefinitions[0].secrets = ([
+              .containerDefinitions[0].secrets[]?
+              | select(.name != "VITA_VOICE_SERVICE_KEY" and .name != "VITA_VOICE_CONTEXT_SECRET")
+            ] + [
+              {"name": "VITA_VOICE_SERVICE_KEY", "valueFrom": "arn:aws:secretsmanager:us-east-2:933629770820:secret:cooppadresd/ai-vita-runtime-wO0tKF:voice_service_key::"},
+              {"name": "VITA_VOICE_CONTEXT_SECRET", "valueFrom": "arn:aws:secretsmanager:us-east-2:933629770820:secret:cooppadresd/ai-vita-runtime-wO0tKF:voice_context_secret::"}
             ]) |
             del(.status, .compatibilities, .taskDefinitionArn, .revision, .registeredAt, .registeredBy, .requiresAttributes)
           ')
