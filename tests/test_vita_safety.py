@@ -141,3 +141,37 @@ async def test_external_cancellation_propagates_to_tool():
     with pytest.raises(asyncio.CancelledError):
         await task
     assert cancelled.is_set()
+
+
+async def test_rag_embedding_uses_cancelable_async_provider_before_querying_database():
+    from unittest.mock import MagicMock
+
+    from app.rag.retriever import PgVectorRetriever
+
+    started, cancelled = asyncio.Event(), asyncio.Event()
+
+    class Embeddings:
+        def embed_query(self, _):
+            raise AssertionError("No bloquear el loop con la ruta síncrona")
+
+        async def aembed_query(self, _):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+    session = MagicMock()
+    task = asyncio.create_task(
+        PgVectorRetriever(Embeddings()).retrieve(
+            session,
+            "consulta sintética",
+            knowledge_base_ids=["allowed"],
+        )
+    )
+    await asyncio.wait_for(started.wait(), 2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert cancelled.is_set()
+    session.execute.assert_not_called()

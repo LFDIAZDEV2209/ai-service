@@ -46,14 +46,20 @@ async def read_context(scope: Scope, user_id: str) -> ContextEnvelope:
     """La identidad la aporta el runtime, nunca el esquema de argumentos del LLM."""
     try:
         code, body = await _get("context", user_id, scope=scope)
-        if code in (401, 403):
+        if code == 401:
             return ContextEnvelope(status="forbidden")
-        if code != 200:
+        statuses = {200: {"ok", "empty"}, 403: {"forbidden"}, 409: {"stale"}, 503: {"unavailable"}}
+        if code not in statuses:
             # 404 de una fachada ausente no acredita que el paciente no tenga plan.
             return ContextEnvelope(status="unavailable")
         envelope = ContextEnvelope.model_validate(body)
+        if envelope.status not in statuses[code]:
+            return ContextEnvelope(status="unavailable")
         if envelope.status != "ok":
             envelope.actions = []
+        if envelope.status not in {"ok", "empty"}:
+            envelope.data = None
+            envelope.sources = []
         return envelope
     except (httpx.HTTPError, TimeoutError, ValueError, ValidationError, VitaAccessError):
         return ContextEnvelope(status="unavailable")

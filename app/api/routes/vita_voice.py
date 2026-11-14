@@ -123,8 +123,8 @@ async def completion(
     payload: CompletionRequest,
     http_request: Request,
     x_vita_session: str = Header(min_length=1),
-    x_vita_conversation: str = Header(min_length=1),
-    x_vita_turn: int = Header(ge=1, le=10000),
+    x_vita_conversation: str = Header(min_length=1, max_length=200),
+    x_vita_turn: int = Header(ge=1, le=1000000),
     session=Depends(get_db_session),
     base_graph=Depends(get_graph),
 ) -> StreamingResponse:

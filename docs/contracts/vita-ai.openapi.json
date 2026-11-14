@@ -434,6 +434,7 @@
             "schema": {
               "type": "string",
               "minLength": 1,
+              "maxLength": 200,
               "title": "X-Vita-Conversation"
             }
           },
@@ -443,7 +444,7 @@
             "required": true,
             "schema": {
               "type": "integer",
-              "maximum": 10000,
+              "maximum": 1000000,
               "minimum": 1,
               "title": "X-Vita-Turn"
             }

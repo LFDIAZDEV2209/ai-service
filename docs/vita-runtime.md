@@ -43,7 +43,10 @@ fecha o paciente enviados por el modelo se rechazan antes de ejecutar. Sin ident
 no hay consulta. No se leen schemas de planes ni se calculan vigencia, nutrición o XP.
 
 Se conservan `ok/empty/unavailable/forbidden/stale`, fecha local, revisión, datos,
-acciones y procedencia del envelope BACK. 404 de una fachada inexistente es
+acciones y procedencia del envelope BACK v1.1. Se exige coherencia HTTP: ok/empty
+200, forbidden 403, unavailable 503, stale 409. Error arbitrario o envelope incoherente
+no se acepta como datos/acciones. Stale descarta contenido previo; empty conserva
+availability del workflow, incluido pending_review. 404 de una fachada inexistente es
 `unavailable`, no prueba de ausencia de plan. Se rechazan acciones con URL/destino
 arbitrario y respuestas mayores a 64 KB; los estados no `ok` no emiten acciones.
 Timeout HTTP total por lectura: 3 s por defecto. No hay reintentos automáticos.
@@ -202,8 +205,8 @@ y verificar correlación/interrupción/audio.
 
 - `uv sync --locked`: dependencias del lock instaladas, sin actualizar `uv.lock`.
 - `uv run ruff check .`: correcto.
-- `uv run pytest -q`: **623 passed, 1 skipped**, 27.80 s. El skip corresponde al
-  PostgreSQL opt-in descrito arriba. 32 warnings existentes: deprecación Starlette/
+- `uv run pytest -q`: **633 passed, 2 skipped**, 28.12 s. Los skips corresponden a
+  los dos tests PostgreSQL opt-in, ejecutados aparte con éxito. 32 warnings existentes: deprecación Starlette/
   httpx y `FakeDbSession.add` asíncrono del doble legado; no fallos de producto.
 - `uv run pytest tests/test_vita_voice.py -k first_final_token -q`: 1 passed;
   primer contenido HTTP ASGI antes de liberar el final de la generación sintética.
@@ -235,3 +238,10 @@ advisory lock/liberación y migración `fe62a09c1741` + rollback reales en DB de
 Tres warnings de Alembic por `path_separator` legado. El wrapper confirmó limpieza.
 Log local protegido: `%TEMP%/vita-ai-postgres-c3f9a72ef59e4cbcaafdd08731253ecf.log`.
 No acredita despliegue en varias réplicas de producción ni audio móvil.
+
+En la revisión final se corrigió además la consulta de embeddings de
+`PgVectorRetriever`: usa `aembed_query` del SDK OpenAI existente. El loop ya no queda
+bloqueado por la variante síncrona durante RAG. Providers síncronos inyectados de
+compatibilidad se ejecutan en thread; los providers propios tienen método async.
+Regresión local: cancelación llega al proveedor async y no se inicia consulta SQL
+ni se utiliza un resultado tardío. No se llamaron APIs reales de embeddings.
