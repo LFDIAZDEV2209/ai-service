@@ -151,6 +151,31 @@ def test_registry_clear():
     assert registry._cache == {}
 
 
+async def test_cached_runtime_is_revoked_even_without_invalidation_event():
+    session = make_session_with_row({"system_prompt": "activo"})
+    registry = make_registry()
+    await registry.get_agent(AGENT_ID, session)
+    result = await session.execute("config-row")
+    result.scalar_one_or_none.return_value = None
+    with pytest.raises(AgentRuntimeError, match="no sincronizado"):
+        await registry.get_agent(AGENT_ID, session)
+    assert AGENT_ID not in registry._cache
+
+
+async def test_cached_runtime_reloads_version_and_retrieval_config_without_event():
+    session = make_session_with_row({"retrieval_config": {"enabled": False}})
+    registry = make_registry()
+    first = await registry.get_agent(AGENT_ID, session)
+    row = (await session.execute("config-row")).scalar_one_or_none()
+    row.version_id = "new-version"
+    row.config = {"retrieval_config": {"enabled": True, "top_k": 2}}
+    second = await registry.get_agent(AGENT_ID, session)
+    assert second.version_id == "new-version"
+    assert second.graph is not first.graph
+    assert second.runtime_config.retrieval_config.enabled
+    assert second.runtime_config.retrieval_config.top_k == 2
+
+
 async def test_retrieval_enabled_injects_tool():
     """Con `retrieval_config.enabled`, el grafo compilado incluye la tool de RAG."""
     session = make_session_with_row(

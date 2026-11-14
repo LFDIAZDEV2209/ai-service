@@ -13,6 +13,7 @@ from alembic import context
 from app.db import models  # noqa: F401  (registra los modelos en Base.metadata)
 from app.db.base import Base
 from app.db.engine import sqlalchemy_url
+from app.voice import store  # noqa: F401 (registra sesiones y recibos de voz)
 
 SCHEMA = "ai"
 

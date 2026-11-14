@@ -77,6 +77,8 @@ class PgVectorRetriever:
         document_id: str | None = None,
         top_k: int | None = None,
     ) -> list[RetrievedChunk]:
+        if not knowledge_base_ids:
+            return []
         settings = get_settings()
         top_k = top_k or settings.rag_top_k
         query_vector = self.embeddings.embed_query(query)

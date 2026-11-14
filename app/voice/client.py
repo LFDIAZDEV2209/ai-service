@@ -22,18 +22,9 @@ logger = logging.getLogger(__name__)
 
 # Endpoint oficial vigente (docs/api-reference/conversations/get-signed-url).
 _GET_SIGNED_URL_PATH = "/v1/convai/conversation/get-signed-url"
-PATIENT_CLIENT_TOOL_NAMES = frozenset(
-    {
-        "get_my_upcoming_appointments",
-        "get_my_requests",
-        "list_specialties",
-        "list_professionals",
-        "get_availability_slots",
-        "request_appointment",
-        "reschedule_appointment",
-        "cancel_appointment",
-    }
-)
+# Las herramientas legadas de citas están retiradas. Las lecturas de Vita se
+# ejecutan en el runtime autenticado, nunca como client tools del proveedor.
+PATIENT_CLIENT_TOOL_NAMES: frozenset[str] = frozenset()
 
 # GET de una versión inmutable. El endpoint de signed URL también recibe esa
 # MISMA versión, sin modificar el agente compartido ni aceptar overrides del cliente.

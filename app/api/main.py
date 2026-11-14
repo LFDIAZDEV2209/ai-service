@@ -20,6 +20,7 @@ from app.api.routes import (
     proactive,
     program_narrative,
     threads,
+    vita_voice,
     voice,
 )
 from app.core.config import get_settings
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(proactive.router)
     app.include_router(lab_exam.router)
     app.include_router(voice.router)
+    app.include_router(vita_voice.router)
     app.include_router(program_narrative.router)
     app.include_router(content_translation.router)
     app.include_router(nutrition_draft.router)

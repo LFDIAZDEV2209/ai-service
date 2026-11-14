@@ -81,6 +81,9 @@ class ChatSuggestion(BaseModel):
 class ChatResponse(BaseModel):
     thread_id: str
     answer: str
+    actions: list[dict] = Field(default_factory=list)
+    sources: list[dict] = Field(default_factory=list)
+    version_id: str | None = None
     agent: str = "base"
     tools_used: list[str] = Field(default_factory=list)
     model: str | None = None
@@ -128,6 +131,10 @@ class ThreadMessageResponse(BaseModel):
 
     role: str = Field(description="Rol del emisor: 'user' (paciente) o 'bot' (agente).")
     text: str = Field(description="Texto plano del mensaje (sin bloques internos de tool_use).")
+    message_id: str | None = None
+    channel: str = "text"
+    status: str = "final"
+    revision: int = 1
 
 
 class ThreadStateResponse(BaseModel):

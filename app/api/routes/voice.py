@@ -8,12 +8,13 @@ URL ni la API key en logs.
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from app.api.security import require_internal_key
 from app.core.config import get_settings
 from app.voice.client import VoiceSessionError, create_signed_url, verify_patient_voice_version
 from app.voice.schemas import VoiceSessionRequest, VoiceSessionResponse
+from app.voice.store import VoiceContextError, voice_store
 
 
 def _normalize_voice_language(language: str | None) -> str | None:
@@ -31,7 +32,9 @@ router = APIRouter(
 )
 
 
-@router.post("/voice/session", response_model=VoiceSessionResponse)
+@router.post(
+    "/voice/session", response_model=VoiceSessionResponse, response_model_exclude_none=True
+)
 async def create_voice_session(payload: VoiceSessionRequest) -> VoiceSessionResponse:
     """Emite una sesión temporal de voz para un paciente autenticado.
 
@@ -43,6 +46,18 @@ async def create_voice_session(payload: VoiceSessionRequest) -> VoiceSessionResp
     if not settings.voice_enabled:
         logger.warning("Voice session solicitada con VOICE_ENABLED=false")
         raise HTTPException(status_code=503, detail="Voz deshabilitada en este entorno.")
+    if settings.vita_voice_enabled:
+        from app.vita.client import VitaAccessError
+        from app.voice.vita_session import create_vita_session
+
+        try:
+            return await create_vita_session(payload)
+        except VoiceContextError as exc:
+            raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+        except VitaAccessError as exc:
+            raise HTTPException(status_code=403, detail="vita_access_unavailable") from exc
+        except VoiceSessionError as exc:
+            raise HTTPException(status_code=exc.status or 502, detail=exc.safe_message) from exc
     if not settings.elevenlabs_api_key or not settings.elevenlabs_agent_id:
         logger.error("Voice session: configuración ElevenLabs incompleta")
         raise HTTPException(
@@ -98,3 +113,12 @@ async def create_voice_session(payload: VoiceSessionRequest) -> VoiceSessionResp
         agent_id=settings.elevenlabs_agent_id,
         conversation_id=session["conversation_id"],
     )
+
+
+@router.delete("/voice/session/{session_id}", status_code=204)
+async def revoke_voice_session(session_id: str, user_id: str = Query(min_length=1)) -> Response:
+    try:
+        await voice_store.revoke(session_id, user_id)
+    except VoiceContextError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    return Response(status_code=204)

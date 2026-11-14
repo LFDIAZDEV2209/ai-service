@@ -22,6 +22,12 @@ class AgentState(TypedDict, total=False):
 
     # Inicio del turno actual dentro del historial acumulado (telemetría por ejecución).
     turn_start_index: int
+    tool_call_count: int
+    tool_budget_exhausted: bool
+    context_agent: str
+    turn_context_changed: bool
+    app_actions: Annotated[list[dict[str, Any]], operator.add]
+    data_sources: Annotated[list[dict[str, Any]], operator.add]
 
     # Historial de conversación (reducer: append + dedupe)
     messages: Annotated[list[AnyMessage], add_messages]

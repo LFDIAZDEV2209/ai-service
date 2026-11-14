@@ -13,7 +13,7 @@ from app.agents.registry import get_agent_profile
 from app.agents.resolver import resolve_agent_profile
 from app.graph.graph import build_graph
 from app.tools.patient_context import get_patient_data
-from app.tools.registry import ALL_TOOLS
+from app.tools.registry import legacy_tools
 from tests.fakes import FakeToolAwareModel
 
 
@@ -131,7 +131,7 @@ async def test_empty_tool_names_bind_base_tools_then_retrieval(session, scope, m
 
     assert bound == [
         [
-            *[tool.name for tool in ALL_TOOLS if tool.name != "get_patient_data"],
+            *[tool.name for tool in legacy_tools()],
             "get_patient_data",
             "retrieve_knowledge",
         ]
