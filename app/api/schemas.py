@@ -143,7 +143,14 @@ class ThreadMessageResponse(BaseModel):
     source_event_id: int | None = None
 
 
-class ThreadStateResponse(BaseModel):
+class HistoryResetResponse(BaseModel):
+    thread_id: str
+    history_revision: int = Field(default=0, ge=0)
+    cleared_at: datetime | None = None
+    reset_reason: Literal["manual", "monthly"] | None = None
+
+
+class ThreadStateResponse(HistoryResetResponse):
     thread_id: str
     voice_sync_status: str | None = None
     message_count: int

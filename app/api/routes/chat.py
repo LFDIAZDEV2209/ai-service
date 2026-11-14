@@ -29,9 +29,12 @@ from app.api.security import require_internal_key
 from app.core.config import get_settings
 from app.core.errors import CoppAiError
 from app.core.logging import get_logger
+from app.history.service import history_service
 from app.memory.adaptive import AdaptiveMemoryService
 from app.observability.executions import ExecutionTracker
 from app.safety.guardrails import RateLimiter
+from app.vita.locking import ThreadBusyError
+from app.voice.store import VoiceContextError
 
 logger = get_logger(__name__)
 
@@ -153,8 +156,29 @@ def _is_vita_request(request: ChatRequest) -> bool:
     )
 
 
-def _with_transcript_lock(graph):
-    if get_settings().vita_transcript_sync_enabled:
+def _history_opt_in(request: ChatRequest) -> bool:
+    return request.supports_vita and request.agent != "whatsapp"
+
+
+async def _prepare_chat_history(request: ChatRequest, thread_id: str, graph):
+    if not _history_opt_in(request):
+        return None
+    if not request.user_id:
+        raise HTTPException(status_code=403, detail="vita_identity_required")
+    config = _build_config(thread_id, request)
+    try:
+        await history_service.prepare_turn(request.user_id, thread_id, graph.checkpointer, config)
+    except ThreadBusyError as exc:
+        raise HTTPException(status_code=409, detail="vita_thread_busy") from exc
+    except VoiceContextError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="history_state_unavailable") from exc
+    return config["configurable"]["vita_history"]
+
+
+def _with_transcript_lock(graph, *, force=False):
+    if force or get_settings().vita_transcript_sync_enabled:
         from app.vita.locking import LockedGraph
 
         if not isinstance(graph, LockedGraph):
@@ -278,14 +302,15 @@ async def chat(
             request.agent_type_id or request.agent or "base",
         )
 
+    history_binding = await _prepare_chat_history(request, thread_id, base_graph)
     graph, recursion_limit, version_id, provider, model = await _resolve_graph(
         request, session, base_graph, thread_id
     )
     if graph is None:
         graph = base_graph
-    graph = _with_transcript_lock(graph)
+    graph = _with_transcript_lock(graph, force=history_binding is not None)
 
-    tracker = ExecutionTracker(session, redact_content=_is_vita_request(request))
+    tracker = ExecutionTracker(session, redact_content=_history_opt_in(request))
     execution_id = await tracker.start(
         thread_id=thread_id,
         agent_type_id=request.agent_type_id or request.agent or "base",
@@ -298,6 +323,8 @@ async def chat(
     )
     started = time.perf_counter()
     config = _build_config(thread_id, request, recursion_limit)
+    if history_binding is not None:
+        config["configurable"]["vita_history"] = history_binding
     config["configurable"]["execution_id"] = execution_id
     try:
         result = await asyncio.wait_for(
@@ -330,8 +357,12 @@ async def chat(
         )
         await asyncio.shield(session.commit())
         raise
+    except (VoiceContextError, ThreadBusyError) as exc:
+        await tracker.fail(execution_id, error="history_turn_rejected", latency_ms=0)
+        await session.commit()
+        raise HTTPException(status_code=getattr(exc, "status", 409), detail=str(exc)) from exc
     except CoppAiError as exc:
-        _log_execution_error("Error ejecutando el grafo", vita=_is_vita_request(request))
+        _log_execution_error("Error ejecutando el grafo", vita=_history_opt_in(request))
         await tracker.fail(
             execution_id,
             error=str(exc),
@@ -355,7 +386,7 @@ async def chat(
         # actualizar el estado de la ejecución y devolver un mensaje seguro,
         # no dejar la execution en RUNNING para siempre.
         _log_execution_error(
-            "Error no controlado ejecutando el grafo", vita=_is_vita_request(request)
+            "Error no controlado ejecutando el grafo", vita=_history_opt_in(request)
         )
         await tracker.fail(
             execution_id,
@@ -462,14 +493,15 @@ async def chat_stream(
             request.agent_type_id or request.agent or "base",
         )
 
+    history_binding = await _prepare_chat_history(request, thread_id, base_graph)
     graph, recursion_limit, version_id, provider, model = await _resolve_graph(
         request, session, base_graph, thread_id
     )
     if graph is None:
         graph = base_graph
-    graph = _with_transcript_lock(graph)
+    graph = _with_transcript_lock(graph, force=history_binding is not None)
 
-    tracker = ExecutionTracker(session, redact_content=_is_vita_request(request))
+    tracker = ExecutionTracker(session, redact_content=_history_opt_in(request))
     execution_id = await tracker.start(
         thread_id=thread_id,
         agent_type_id=request.agent_type_id or request.agent or "base",
@@ -495,6 +527,8 @@ async def chat_stream(
         running_tasks: dict[str, dict[str, Any]] = {}
         try:
             config = _build_config(thread_id, request, recursion_limit)
+            if history_binding is not None:
+                config["configurable"]["vita_history"] = history_binding
             config["configurable"]["execution_id"] = execution_id
             agent_key = request.agent or request.agent_type_id or "base"
 
@@ -590,7 +624,7 @@ async def chat_stream(
                         payload = json.dumps({"type": "flow", **entry}, ensure_ascii=False)
                         yield f"event: flow\ndata: {payload}\n\n"
         except Exception:
-            _log_execution_error("Error en el stream del agente", vita=_is_vita_request(request))
+            _log_execution_error("Error en el stream del agente", vita=_history_opt_in(request))
             error = "No fue posible procesar la solicitud."
             payload = json.dumps({"type": "error", "error": error}, ensure_ascii=False)
             yield f"event: error\ndata: {payload}\n\n"

@@ -16,6 +16,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langgraph.types import Overwrite
 
 from app.core.config import get_settings
+from app.history.service import history_service
 from app.vita.client import VitaAccessError, read_catalog
 from app.vita.locking import ThreadBusyError, thread_guard
 from app.voice.store import VitaVoiceSession, VoiceContextError, voice_store
@@ -212,8 +213,18 @@ async def sync_closed_thread(user_id: str, thread_id: str, graph) -> tuple[str, 
             await read_catalog(user_id)
             config = {"configurable": {"thread_id": f"{user_id}::{thread_id}"}}
             async with thread_guard(config["configurable"]["thread_id"]):
+                await history_service.ensure_locked(
+                    user_id, thread_id, graph.checkpointer, opt_in=True
+                )
                 for candidate in candidates:
-                    record = await voice_store.get_owned(candidate.id, user_id, thread_id)
+                    try:
+                        record = await voice_store.get_owned(candidate.id, user_id, thread_id)
+                    except VoiceContextError as exc:
+                        if exc.status == 404:
+                            # La limpieza pudo eliminar el vínculo después de
+                            # seleccionar candidatos. Un evento tardío se ignora.
+                            continue
+                        raise
                     if not record.revoked and record.expires_at > datetime.now(UTC):
                         statuses.append("processing")
                         continue
@@ -229,6 +240,7 @@ async def sync_closed_thread(user_id: str, thread_id: str, graph) -> tuple[str, 
                     existing = list((snapshot.values or {}).get("messages", [])) if snapshot else []
                     reconciled = reconcile_messages(existing, transcript, record.id)
                     if existing != reconciled:
+                        await history_service.activity_locked(user_id, thread_id)
                         await graph.aupdate_state(
                             config,
                             {"messages": Overwrite(reconciled)},

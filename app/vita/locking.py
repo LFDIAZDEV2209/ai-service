@@ -37,10 +37,18 @@ class LockedGraph:
 
     async def ainvoke(self, *args, config, **kwargs):
         async with thread_guard(config["configurable"]["thread_id"]):
+            if config["configurable"].get("vita_history") is not None:
+                from app.history.service import history_service
+
+                await history_service.before_turn_locked(self.graph, config)
             return await self.graph.ainvoke(*args, config=config, **kwargs)
 
     async def astream(self, *args, config, **kwargs):
         stream = self.graph.astream(*args, config=config, **kwargs)
         async with thread_guard(config["configurable"]["thread_id"]), aclosing(stream):
+            if config["configurable"].get("vita_history") is not None:
+                from app.history.service import history_service
+
+                await history_service.before_turn_locked(self.graph, config)
             async for item in stream:
                 yield item

@@ -42,7 +42,10 @@ async def lifespan(_app: FastAPI):
         from app.db.engine import run_db_migrations
 
         await asyncio.to_thread(run_db_migrations)
-    yield
+    from app.history.service import retention_worker
+
+    async with retention_worker():
+        yield
 
 
 def create_app() -> FastAPI:

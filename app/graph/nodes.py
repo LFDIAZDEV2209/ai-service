@@ -61,6 +61,8 @@ def guardrails_node(state: AgentState) -> dict:
         "data_sources": Overwrite([]),
         "turn_context_changed": state.get("context_agent") != state.get("agent", "base"),
     }
+    if configurable.get("vita_history") is not None:
+        turn_state.update(memory_context="", experience_context="")
 
     if not result.safe:
         return {
@@ -327,6 +329,10 @@ def make_memory_load_node(
 
     async def memory_load_node(state: AgentState) -> dict:
         configurable = get_config().get("configurable", {})
+        # La memoria antigua no tiene thread/canal/revisión. No puede volver
+        # a inyectar conversaciones eliminadas ni mezclarlas con ERP.
+        if configurable.get("vita_history") is not None:
+            return {"memory_context": ""}
         user_id = configurable.get("user_id")
         agent_type_id = state.get("agent")
         if not user_id or not agent_type_id:
@@ -359,6 +365,8 @@ def make_memory_save_node(
 
     async def memory_save_node(state: AgentState) -> dict:
         configurable = get_config().get("configurable", {})
+        if configurable.get("vita_history") is not None:
+            return {}
         user_id = configurable.get("user_id")
         agent_type_id = state.get("agent")
         input_text = state.get("input")
@@ -412,6 +420,8 @@ def make_experience_load_node(
     """
 
     async def experience_load_node(state: AgentState) -> dict:
+        if get_config().get("configurable", {}).get("vita_history") is not None:
+            return {"experience_context": ""}
         agent_type_id = state.get("agent")
         if not agent_type_id:
             return {}

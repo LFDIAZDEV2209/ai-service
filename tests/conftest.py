@@ -9,6 +9,8 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -40,11 +42,64 @@ def pytest_asyncio_loop_factories(item):
     Solo la integración psycopg de Vita en Windows necesita Selector. El resto
     de la suite y Linux conservan su loop por defecto.
     """
-    if sys.platform == "win32" and item.path.name == "test_vita_postgres.py":
+    if sys.platform == "win32" and item.path.name in {
+        "test_vita_postgres.py",
+        "test_vita_history_postgres.py",
+    }:
         return {"vita_psycopg_selector": asyncio.SelectorEventLoop}
     # Si el hook está registrado, pytest-asyncio 1.4 exige mapping también
     # para los demás items; new_event_loop conserva su factory/policy normal.
     return {"default": asyncio.new_event_loop}
+
+
+@pytest.fixture(autouse=True)
+def history_unit_boundary(request, monkeypatch):
+    """Los tests anteriores siguen sin BD; el módulo dedicado prueba el servicio real.
+
+    Solo sustituye la nueva frontera durable en tests que ya simulaban DB/locks.
+    Nunca se aplica a las regresiones de historial ni a PostgreSQL.
+    """
+    from app.history import service
+
+    @asynccontextmanager
+    async def idle_worker():
+        yield
+
+    if request.node.path.name != "test_vita_history_postgres.py":
+        monkeypatch.setattr(service, "retention_worker", idle_worker)
+    if request.node.path.name not in {
+        "test_api.py",
+        "test_threads_state.py",
+        "test_voice_transcript.py",
+        "test_vita_opt_in.py",
+        "test_vita_voice.py",
+        "test_voice.py",
+        "test_conversation_recovery.py",
+    }:
+        return
+
+    @asynccontextmanager
+    async def unlocked(_):
+        yield
+
+    async def prepare(user_id, thread_id, saver, config):
+        config["configurable"]["vita_history"] = {
+            "user_id": user_id,
+            "thread_id": thread_id,
+            "revision": 0,
+        }
+
+    for name in ("get", "ensure_locked", "activity_locked", "before_turn_locked"):
+        monkeypatch.setattr(service.history_service, name, AsyncMock(return_value=None))
+    monkeypatch.setattr(service.history_service, "prepare_turn", prepare)
+    monkeypatch.setattr(service, "thread_guard", unlocked)
+    monkeypatch.setattr("app.api.routes.threads.thread_guard", unlocked)
+    monkeypatch.setattr("app.voice.vita_session.thread_guard", unlocked)
+    from langgraph.checkpoint.memory import MemorySaver
+
+    monkeypatch.setattr(
+        "app.voice.vita_session.get_checkpointer", AsyncMock(return_value=MemorySaver())
+    )
 
 
 @pytest.fixture

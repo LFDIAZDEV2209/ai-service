@@ -5,7 +5,10 @@ import uuid
 from datetime import UTC, datetime
 
 from app.core.config import get_settings
+from app.history.service import history_service, storage_key
+from app.memory.checkpointer import get_checkpointer
 from app.vita.client import read_catalog
+from app.vita.locking import ThreadBusyError, thread_guard
 from app.voice.client import create_signed_url
 from app.voice.context import sign_context
 from app.voice.schemas import VoiceSessionRequest, VoiceSessionResponse
@@ -20,6 +23,8 @@ async def reserve_binding(
     version_id: str | None,
     runtime_mode: str,
 ) -> VitaVoiceSession:
+    if not payload.supports_vita_voice:
+        raise VoiceContextError("voice_history_opt_in_required", 403)
     if not upstream.get("conversation_id"):
         raise VoiceContextError("voice_conversation_unbound", 502)
     expiry = int(time.time()) + get_settings().vita_voice_session_ttl
@@ -36,7 +41,17 @@ async def reserve_binding(
         expires_at=datetime.fromtimestamp(expiry, UTC),
         revoked=False,
     )
-    await voice_store.create(record)
+    # La creación comparte el lock con limpieza/importación; ningún vínculo
+    # puede aparecer entre la revocación de sesiones y el borrado del checkpoint.
+    try:
+        async with thread_guard(storage_key(record.user_id, record.thread_id)):
+            await history_service.ensure_locked(
+                record.user_id, record.thread_id, await get_checkpointer(), opt_in=True
+            )
+            await history_service.activity_locked(record.user_id, record.thread_id)
+            await voice_store.create(record)
+    except ThreadBusyError as exc:
+        raise VoiceContextError("vita_thread_busy", 409) from exc
     return record
 
 
