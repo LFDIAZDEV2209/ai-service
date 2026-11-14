@@ -137,10 +137,14 @@ jobs:
           # X-Internal-Key). Declarativo e idempotente (reemplaza si existe).
           NEW_TASK_DEF_JSON=$(echo "$TASK_DEF_JSON" | jq --arg img "$NEW_IMAGE" '
             .containerDefinitions[0].image = $img |
-            .containerDefinitions[0].environment = ([
+              .containerDefinitions[0].environment = ([
               .containerDefinitions[0].environment[]?
-              | select(.name != "BACKEND_BASE_URL")
-            ] + [{"name": "BACKEND_BASE_URL", "value": "http://internal-cooppadresd-alb-internal-1395345436.us-east-2.elb.amazonaws.com"}]) |
+              | select(.name != "BACKEND_BASE_URL" and .name != "VITA_RUNTIME_ENABLED" and .name != "VITA_TRANSCRIPT_SYNC_ENABLED")
+            ] + [
+              {"name": "BACKEND_BASE_URL", "value": "http://internal-cooppadresd-alb-internal-1395345436.us-east-2.elb.amazonaws.com"},
+              {"name": "VITA_RUNTIME_ENABLED", "value": "true"},
+              {"name": "VITA_TRANSCRIPT_SYNC_ENABLED", "value": "true"}
+            ]) |
             del(.status, .compatibilities, .taskDefinitionArn, .revision, .registeredAt, .registeredBy, .requiresAttributes)
           ')
           REGISTERED=$(aws ecs register-task-definition --cli-input-json "$NEW_TASK_DEF_JSON" --region "${{ env.AWS_REGION }}")
