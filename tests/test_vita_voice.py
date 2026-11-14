@@ -7,6 +7,7 @@ integración aislada antes de activar el modo. No se accede a la BD compartida.
 import asyncio
 import json
 import time
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -106,6 +107,14 @@ def rig(monkeypatch):
     monkeypatch.setattr(vita_voice, "voice_store", store)
     monkeypatch.setattr("app.api.routes.voice.voice_store", store)
     monkeypatch.setattr(vita_voice, "read_catalog", AsyncMock(return_value=[]))
+    history = SimpleNamespace(prepare_turn=AsyncMock(), before_turn_locked=AsyncMock())
+    monkeypatch.setattr(vita_voice, "history_service", history)
+
+    @asynccontextmanager
+    async def unlocked(_):
+        yield
+
+    monkeypatch.setattr(vita_voice, "thread_guard", unlocked)
     model = RecordingFakeModel(
         responses=[
             AIMessage(content="Respuesta uno"),
@@ -138,6 +147,7 @@ def rig(monkeypatch):
         graph=graph,
         headers=headers,
         resolver=resolver,
+        history=history,
         monkeypatch=monkeypatch,
     )
 
@@ -158,6 +168,24 @@ async def post(rig, payload=None, headers=None):
 
 
 LANGUAGE_TOOLS = [{"type": "function", "function": {"name": "language_detection"}}]
+
+
+async def test_history_cleanup_rejects_voice_before_generation(rig):
+    rig.history.prepare_turn.side_effect = VoiceContextError("history_revision_changed", 409)
+    result = await post(rig)
+    assert result.status_code == 409
+    rig.resolver.assert_not_awaited()
+    assert rig.store.receipts[1].status == "interrupted"
+
+
+async def test_replay_revalidates_history_before_sending_old_answer(rig):
+    assert (await post(rig)).status_code == 200
+    rig.history.before_turn_locked.side_effect = VoiceContextError("history_revision_changed", 409)
+    replayed = await post(rig)
+    assert replayed.status_code == 200
+    assert "Respuesta uno" not in replayed.text
+    assert "voice_turn_interrupted" in replayed.text
+    assert len(rig.model.prompts) == 1
 
 
 async def test_native_language_tool_roundtrip_is_not_another_patient_turn(rig):

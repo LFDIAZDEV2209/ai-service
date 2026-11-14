@@ -20,8 +20,9 @@ from app.api.message_text import extract_message_text
 from app.api.routes.chat import _build_config, _check_rate_limit, _extract_answer
 from app.api.schemas import ChatRequest
 from app.core.config import get_settings
+from app.history.service import history_service
 from app.vita.client import VitaAccessError, read_catalog
-from app.vita.locking import ThreadBusyError
+from app.vita.locking import ThreadBusyError, thread_guard
 from app.vita.runtime import resolve_turn
 from app.voice.context import verify_context
 from app.voice.language import (
@@ -205,6 +206,19 @@ async def completion(
             "voice_session_id": record.id,
         }
     )
+    try:
+        await history_service.prepare_turn(
+            record.user_id, record.thread_id, base_graph.checkpointer, config
+        )
+    except (VoiceContextError, ThreadBusyError) as exc:
+        if receipt.status != "completed":
+            with suppress(VoiceContextError):
+                await voice_store.finish_turn(session_id, ordinal, "interrupted")
+        raise HTTPException(status_code=getattr(exc, "status", 409), detail=str(exc)) from exc
+    except Exception as exc:
+        with suppress(VoiceContextError):
+            await voice_store.finish_turn(session_id, ordinal, "interrupted")
+        raise HTTPException(status_code=503, detail="history_state_unavailable") from exc
     if receipt.status == "completed":
         snapshot = await base_graph.aget_state(config)
         message = next(
@@ -219,9 +233,27 @@ async def completion(
             raise HTTPException(status_code=409, detail="voice_receipt_without_checkpoint")
 
         async def replay():
-            yield _chunk(receipt.response_message_id, extract_message_text(message.content))
-            yield _chunk(receipt.response_message_id, done=True)
-            yield "data: [DONE]\n\n"
+            try:
+                async with thread_guard(config["configurable"]["thread_id"]):
+                    await history_service.before_turn_locked(base_graph, config)
+                    current = await base_graph.aget_state(config)
+                    replay_message = next(
+                        (
+                            m
+                            for m in (current.values or {}).get("messages", [])
+                            if m.id == receipt.response_message_id
+                        ),
+                        None,
+                    )
+                    if replay_message is None:
+                        raise VoiceContextError("voice_receipt_without_checkpoint", 409)
+                    yield _chunk(
+                        receipt.response_message_id, extract_message_text(replay_message.content)
+                    )
+                    yield _chunk(receipt.response_message_id, done=True)
+                    yield "data: [DONE]\n\n"
+            except (VoiceContextError, ThreadBusyError):
+                yield 'data: {"error":{"code":"voice_turn_interrupted"}}\n\n'
 
         return StreamingResponse(replay(), media_type="text/event-stream")
     try:

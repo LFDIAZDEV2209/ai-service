@@ -32,7 +32,10 @@ def test_documentary_or_conceptual_questions_do_not_read_personal_plans(query):
 
 @pytest.mark.parametrize("channel", ["text", "voice"])
 @pytest.mark.parametrize("specialist", [True, False])
-async def test_retrieval_is_prepared_once_from_authorized_scope(monkeypatch, channel, specialist):
+@pytest.mark.parametrize("local_retrieval", [True, False])
+async def test_retrieval_is_prepared_once_from_authorized_scope(
+    monkeypatch, channel, specialist, local_retrieval
+):
     checkpoint = MemorySaver()
     model = RecordingFakeModel(responses=[AIMessage(content="Según la guía, practica una pausa.")])
     retrieved = []
@@ -77,6 +80,10 @@ async def test_retrieval_is_prepared_once_from_authorized_scope(monkeypatch, cha
         ),
     )
     monkeypatch.setattr(runtime, "classify", AsyncMock(return_value=None))
+    if specialist and not local_retrieval:
+        monkeypatch.setattr(
+            runtime, "resolve_knowledge_base_ids", AsyncMock(return_value=["global"])
+        )
 
     @asynccontextmanager
     async def unlocked(_):
@@ -85,7 +92,7 @@ async def test_retrieval_is_prepared_once_from_authorized_scope(monkeypatch, cha
     monkeypatch.setattr("app.vita.locking.thread_guard", unlocked)
     session = make_session_with_row(
         {
-            "retrieval_config": {"enabled": True},
+            "retrieval_config": {"enabled": local_retrieval},
             "tools": [],
         },
         knowledge_bases=[{"id": "global", "scope": "Global"}]
@@ -111,7 +118,8 @@ async def test_retrieval_is_prepared_once_from_authorized_scope(monkeypatch, cha
     assert turn.agent_id == (AGENT_ID if specialist else "base")
     assert result["tools_used"] == ["retrieve_knowledge"]
     assert len(model.prompts) == 1
-    assert retrieved == [(["global", "own-psychology"] if specialist else ["global"], query)]
+    expected = ["global", "own-psychology"] if specialist and local_retrieval else ["global"]
+    assert retrieved == [(expected, query)]
     assert "Guía de bienestar" in str(model.prompts[0])
 
 

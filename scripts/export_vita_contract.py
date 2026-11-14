@@ -47,8 +47,10 @@ def main() -> None:
     target.write_text(json.dumps(spec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Contrato local: {target.relative_to(ROOT)}")
     for action, revision, filename in (
-        ("upgrade", "e7041890ceaa:head", "vita-voice-migration.sql"),
+        ("upgrade", "e7041890ceaa:fe62a09c1741", "vita-voice-migration.sql"),
         ("downgrade", "fe62a09c1741:e7041890ceaa", "vita-voice-rollback.sql"),
+        ("upgrade", "fe62a09c1741:18c4f6a91b20", "vita-history-migration.sql"),
+        ("downgrade", "18c4f6a91b20:fe62a09c1741", "vita-history-rollback.sql"),
     ):
         result = subprocess.run(
             [sys.executable, "-m", "alembic", action, revision, "--sql"],

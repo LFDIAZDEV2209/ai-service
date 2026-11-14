@@ -110,12 +110,18 @@ async def resolve_turn(
         compiled = await runtime_registry.get_agent(agent.runtime_key, session)
         if compiled.version_id != agent.version_id:
             raise VitaAccessError("vita_version_not_synced")
+        ground = (scope is None or documentation_query(text)) and not service_query(text)
+        global_ids = (
+            await resolve_knowledge_base_ids(session, "base", [])
+            if ground and not compiled.runtime_config.retrieval_config.enabled
+            else []
+        )
         compiled = await runtime_registry.with_vita_reads(
             compiled,
             channel=channel,
             scope=scope,
-            ground_knowledge=(scope is None or documentation_query(text))
-            and not service_query(text),
+            ground_knowledge=ground,
+            global_knowledge_base_ids=global_ids,
         )
         cfg = compiled.runtime_config
         return ResolvedTurn(

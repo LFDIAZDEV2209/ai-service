@@ -12,7 +12,10 @@ La selección de especialista ya no se descarta al detectar una capacidad person
 Palabras como test/rutina/ejercicio por sí solas no autorizan consultar una ficha:
 las preguntas sobre protocolos/documentación siguen la ruta documental. Se mantienen
 los canales y el catálogo autorizado de BACK; un agente creado pero no autorizado
-para el paciente no se puede seleccionar por su nombre.
+para el paciente no se puede seleccionar por su nombre. Luis autorizó el 14-11-2026
+que el catálogo Vita incluya automáticamente todos los tipos publicados/activos para
+pacientes activos con consentimiento, sin exigir instancias asignadas. El backend
+mantiene ese filtro y revalida estado/versión en cada turno.
 
 Para temas de un especialista se prepara `retrieve_knowledge` antes de una sola
 generación de respuesta, tanto en texto como en voz. Se respeta `retrieval.enabled`
@@ -31,6 +34,13 @@ Regresión local: 698 pruebas correctas, 2 PostgreSQL omitidas por no disponer d
 URI aislada en ese comando, 32 avisos heredados. Casos nuevos cubren documentación
 ES/EN, especialista y fallback Global, saludos sin RAG y ciclo de idioma sin doble
 generación. Esto no acredita por sí solo contenido, asignaciones o audio en producción.
+
+La publicación Global también se hereda en Vita cuando un especialista no habilitó
+su RAG propio: el overlay añade únicamente IDs Global activos. No habilita sus KBs
+propias ni cambia la configuración guardada del ERP. Una consulta de RDS de solo lectura
+confirmó seis documentos Listo y 174 chunks de Psicología; Protocolos Generales aún
+no contiene documentos. Cinco chunks huérfanos quedan excluidos por los filtros del
+vector store. La cuenta de QA autenticada confirmó las seis lecturas de datos `ok`.
 
 Rama `feature/vita-app-orchestration`, base `cbbe9e2` sobre `a576191`. Contrato
 canónico del workspace: `openspec/changes/vita-asistente-integral/CONTRATOS-VITA.md`.

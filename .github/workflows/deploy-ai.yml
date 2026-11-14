@@ -55,6 +55,10 @@ jobs:
         # nueva debe habilitarla (CREATE EXTENSION) antes de las migraciones.
         run: psql "postgresql://test:test@localhost:5432/test" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
 
+      - name: Crear DB exclusiva de integración Vita
+        # Las pruebas de migración/rollback no comparten ai con los tests API.
+        run: psql "postgresql://test:test@localhost:5432/test" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE vita_test_integration;'
+
       - name: Instalar dependencias de test
         run: |
           pip install --upgrade pip
@@ -67,6 +71,7 @@ jobs:
         run: pytest -q
         env:
           DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/test
+          VITA_TEST_DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/vita_test_integration
           ENVIRONMENT: test
           INTERNAL_API_KEY: ci-test-key
           # Claves dummy: los tests no llaman al LLM (usan fakes), pero la
@@ -139,14 +144,15 @@ jobs:
             .containerDefinitions[0].image = $img |
               .containerDefinitions[0].environment = ([
               .containerDefinitions[0].environment[]?
-              | select(.name != "BACKEND_BASE_URL" and .name != "VITA_RUNTIME_ENABLED" and .name != "VITA_TRANSCRIPT_SYNC_ENABLED" and .name != "VITA_ELEVENLABS_AGENT_ID" and .name != "VITA_ELEVENLABS_VERSION_ID" and .name != "VITA_VOICE_ENABLED")
+              | select(.name != "BACKEND_BASE_URL" and .name != "VITA_RUNTIME_ENABLED" and .name != "VITA_TRANSCRIPT_SYNC_ENABLED" and .name != "VITA_ELEVENLABS_AGENT_ID" and .name != "VITA_ELEVENLABS_VERSION_ID" and .name != "VITA_VOICE_ENABLED" and .name != "VITA_VOICE_TRANSPORT_VERIFIED")
             ] + [
               {"name": "BACKEND_BASE_URL", "value": "http://internal-cooppadresd-alb-internal-1395345436.us-east-2.elb.amazonaws.com"},
               {"name": "VITA_RUNTIME_ENABLED", "value": "true"},
               {"name": "VITA_TRANSCRIPT_SYNC_ENABLED", "value": "true"},
               {"name": "VITA_ELEVENLABS_AGENT_ID", "value": "agent_5501m7dgvbpff26b1nk5s73qx4kf"},
-              {"name": "VITA_ELEVENLABS_VERSION_ID", "value": "agtvrsn_4801m7dj6kxsexbs7wwynbnnbpzt"},
-              {"name": "VITA_VOICE_ENABLED", "value": "false"}
+              {"name": "VITA_ELEVENLABS_VERSION_ID", "value": "agtvrsn_0601m7dwk6x3fs7txk78k568ca15"},
+              {"name": "VITA_VOICE_ENABLED", "value": "true"},
+              {"name": "VITA_VOICE_TRANSPORT_VERIFIED", "value": "true"}
             ]) |
               .containerDefinitions[0].secrets = ([
               .containerDefinitions[0].secrets[]?

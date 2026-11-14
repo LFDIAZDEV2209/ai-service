@@ -271,6 +271,7 @@ class AgentRuntimeRegistry:
         channel: str = "text",
         scope: str | None = None,
         ground_knowledge: bool = False,
+        global_knowledge_base_ids: list[str] | None = None,
     ) -> CompiledAgent:
         """Overlay explícito SOLO tras autorización Vita; no cambia la config ERP.
 
@@ -280,6 +281,11 @@ class AgentRuntimeRegistry:
         from app.tools.vita import VITA_READ_TOOL_NAMES
 
         config = compiled.runtime_config.model_copy(deep=True)
+        # Publicar una KB Global concede referencia común a Vita. Deshabilitar
+        # RAG propio no concede sus documentos: el overlay solo añade Global.
+        if not config.retrieval_config.enabled and global_knowledge_base_ids:
+            config.retrieval_config.enabled = True
+            config.retrieval_config.knowledge_base_ids = list(global_knowledge_base_ids)
         names = {t.name for t in self._select_tools(config.tools, compiled.agent_type_id)}
         config.tools = sorted((names - {"get_patient_data"}) | VITA_READ_TOOL_NAMES)
         prepare = None

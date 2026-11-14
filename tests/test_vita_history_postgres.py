@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from alembic import command
 from app.api.deps import get_db_session, get_graph
 from app.api.main import create_app
-from app.api.routes import chat, threads
+from app.api.routes import chat, threads, vita_voice
 from app.core.config import get_settings
 from app.db.models import Message, Thread
 from app.graph.graph import build_graph
@@ -35,6 +35,7 @@ from app.history.store import VitaHistory
 from app.memory.checkpointer import get_checkpointer
 from app.vita import locking
 from app.voice import store, transcript, vita_session
+from app.voice.context import sign_context
 from tests.fakes import RecordingFakeModel
 from tests.test_api import FakeDbSession
 
@@ -376,6 +377,56 @@ async def test_month_transition_revokes_voice_and_rejects_old_admission(rig):
     with pytest.raises(store.VoiceContextError):
         await store.voice_store.get(sid)
     assert (await rig.history.get("owner", "thread")).reset_reason == "monthly"
+
+
+async def test_http_custom_llm_uses_durable_history_and_clear_revokes_replay(rig):
+    """Adaptador HTTP real + saver/recibos SQL, sin proveedor ni pacientes reales."""
+    from app.vita.runtime import ResolvedTurn
+
+    settings = get_settings()
+    for name, value in {
+        "voice_enabled": True,
+        "vita_runtime_enabled": True,
+        "vita_voice_enabled": True,
+        "vita_voice_transport_verified": True,
+        "vita_voice_service_key": "fixture-service-" * 3,
+        "vita_voice_context_secret": "fixture-context-" * 3,
+    }.items():
+        rig.monkeypatch.setattr(settings, name, value)
+    rig.monkeypatch.setattr(vita_voice, "history_service", rig.history)
+    rig.monkeypatch.setattr(vita_voice, "read_catalog", AsyncMock(return_value=[]))
+
+    async def resolve(**_):
+        return ResolvedTurn(
+            locking.LockedGraph(rig.graph, "fixture"), "base", None, "fake", "fake", 25, "fixture"
+        )
+
+    resolver = AsyncMock(side_effect=resolve)
+    rig.monkeypatch.setattr(vita_voice, "resolve_turn", resolver)
+    await seed(rig)
+    sid = await voice(rig)
+    record = await store.voice_store.get(sid)
+    headers = {
+        "Authorization": f"Bearer {settings.vita_voice_service_key}",
+        "X-Vita-Session": sign_context(
+            sid, int(record.expires_at.timestamp()), settings.vita_voice_context_secret
+        ),
+        "X-Vita-Conversation": record.conversation_id,
+        "X-Vita-Turn": "1",
+    }
+    payload = {"stream": True, "messages": [{"role": "user", "content": "Hola"}]}
+    path = "/internal/voice/v1/chat/completions"
+    result = await rig.client.post(path, json=payload, headers=headers)
+    assert result.status_code == 200 and "fixture response" in result.text
+    replay = await rig.client.post(path, json=payload, headers=headers)
+    assert replay.status_code == 200 and "fixture response" in replay.text
+    resolver.assert_awaited_once()
+    assert (await clear(rig)).json()["history_revision"] == 1
+    rejected = await rig.client.post(path, json=payload, headers=headers)
+    assert rejected.status_code == 403
+    assert "fixture response" not in rejected.text
+    resolver.assert_awaited_once()
+    assert (await rig.graph.aget_state(config())).created_at is None
 
 
 async def test_restart_after_checkpoint_deleted_before_revision_commit_finishes_once(rig):

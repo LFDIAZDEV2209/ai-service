@@ -95,10 +95,10 @@ El importador revalida cada vínculo dentro del mismo lock después de seleccion
 candidatos. Si una limpieza lo eliminó, ignora ese evento tardío sin consultar al
 proveedor ni restaurar mensajes. Una reserva de voz nueva utiliza el mismo lock.
 
-## Hook que integra root en `vita_voice.py`
+## Hook integrado por root en `vita_voice.py`
 
-Ese archivo pertenece a root y no se modifica en este carril. Antes de desplegar,
-integrar ambos puntos; sin ellos no queda cerrada la aceptación Custom LLM:
+Root integró ambos puntos y los comprobó con HTTP ASGI + saver y recibos PostgreSQL
+reales, además de cancelación y replay con revisión invalidada en pruebas aisladas:
 
 1. Después de construir `config` y sus `voice_session_id`/IDs de mensajes, **antes**
    de la rama de replay de recibo completado y de `resolve_turn`, llamar:
@@ -124,7 +124,9 @@ integrar ambos puntos; sin ellos no queda cerrada la aceptación Custom LLM:
 
 BACK/APP deben terminar la llamada antes de DELETE e invalidar streams/peticiones
 anteriores al limpiar o detectar revisión superior, incluso con GET vacío.
-Root valida estos hooks y el recorrido AI→BACK→app al integrar los tres carriles.
+La integración local completa pasó 730 pruebas con PostgreSQL descartable, sin
+omisiones (40 avisos heredados). Se añadieron después cuatro casos de herencia Global;
+la pasada final y el recorrido publicado se registran en la entrega de root.
 
 ## Alcance de voz externa
 
