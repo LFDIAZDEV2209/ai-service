@@ -12,10 +12,39 @@ from app.voice.schemas import VoiceSessionRequest, VoiceSessionResponse
 from app.voice.store import VitaVoiceSession, VoiceContextError, voice_store
 
 
+async def reserve_binding(
+    payload: VoiceSessionRequest,
+    upstream: dict,
+    *,
+    agent_id: str,
+    version_id: str | None,
+    runtime_mode: str,
+) -> VitaVoiceSession:
+    if not upstream.get("conversation_id"):
+        raise VoiceContextError("voice_conversation_unbound", 502)
+    expiry = int(time.time()) + get_settings().vita_voice_session_ttl
+    record = VitaVoiceSession(
+        id=str(uuid.uuid4()),
+        user_id=payload.user_id,
+        patient_id=payload.patient_id,
+        thread_id=payload.thread_id or str(uuid.uuid4()),
+        conversation_id=upstream["conversation_id"],
+        agent_id=agent_id,
+        version_id=version_id,
+        runtime_mode=runtime_mode,
+        language="en" if payload.language == "en" else "es",
+        expires_at=datetime.fromtimestamp(expiry, UTC),
+        revoked=False,
+    )
+    await voice_store.create(record)
+    return record
+
+
 async def create_vita_session(payload: VoiceSessionRequest) -> VoiceSessionResponse:
     settings = get_settings()
     if (
-        not settings.vita_runtime_enabled
+        not payload.supports_vita_voice
+        or not settings.vita_runtime_enabled
         or not settings.vita_voice_transport_verified
         or len(settings.vita_voice_context_secret.encode()) < 32
         or len(settings.vita_voice_service_key.encode()) < 32
@@ -30,31 +59,22 @@ async def create_vita_session(payload: VoiceSessionRequest) -> VoiceSessionRespo
         settings.vita_elevenlabs_agent_id,
         settings.vita_elevenlabs_version_id,
     )
-    if not upstream.get("conversation_id"):
-        raise VoiceContextError("voice_conversation_unbound", 502)
-    session_id = str(uuid.uuid4())
-    thread_id = payload.thread_id or str(uuid.uuid4())
-    expiry = int(time.time()) + settings.vita_voice_session_ttl
-    record = VitaVoiceSession(
-        id=session_id,
-        user_id=payload.user_id,
-        patient_id=payload.patient_id,
-        thread_id=thread_id,
-        conversation_id=upstream["conversation_id"],
-        language="en" if payload.language == "en" else "es",
-        expires_at=datetime.fromtimestamp(expiry, UTC),
-        revoked=False,
+    record = await reserve_binding(
+        payload,
+        upstream,
+        agent_id=settings.vita_elevenlabs_agent_id,
+        version_id=settings.vita_elevenlabs_version_id,
+        runtime_mode="vita",
     )
-    await voice_store.create(record)
     return VoiceSessionResponse(
         signed_url=upstream["signed_url"],
         agent_id=settings.vita_elevenlabs_agent_id,
         conversation_id=record.conversation_id,
-        session_id=session_id,
-        thread_id=thread_id,
+        session_id=record.id,
+        thread_id=record.thread_id,
         session_token=sign_context(
-            session_id,
-            expiry,
+            record.id,
+            int(record.expires_at.timestamp()),
             settings.vita_voice_context_secret,
         ),
         expires_at=record.expires_at,

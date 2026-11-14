@@ -45,6 +45,9 @@ class SimulatedStore:
             patient_id="patient",
             thread_id="shared",
             conversation_id="conv_fixture",
+            agent_id="agent_vita_fixture",
+            version_id=None,
+            runtime_mode="vita",
             language="es",
             revoked=False,
             expires_at=datetime.fromtimestamp(int(time.time()) + 300, UTC),
@@ -353,6 +356,7 @@ async def test_vita_session_emits_only_reduced_context_and_bound_thread(rig):
                 "patient_id": "patient",
                 "thread_id": "existing",
                 "language": "en",
+                "supports_vita_voice": True,
             },
             headers={"X-Internal-Key": settings.internal_api_key},
         )

@@ -23,6 +23,7 @@ class VoiceSessionRequest(BaseModel):
     # Idioma de la app: elige una versión publicada/verificada, nunca cambia
     # el agente compartido. Ausente/desconocido usa la versión española.
     language: str | None = None
+    supports_vita_voice: bool = False
 
 
 class VoiceSessionResponse(BaseModel):

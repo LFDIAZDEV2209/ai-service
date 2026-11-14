@@ -17,6 +17,7 @@ from langgraph.types import Overwrite
 from app.agents.prompts import (
     BASE_SYSTEM_PROMPT,
     PATIENT_SCOPE_POLICY,
+    VOICE_DELIVERY_POLICY,
     WHATSAPP_SCOPE_POLICY,
     build_control_guidance,
     build_language_instruction,
@@ -44,6 +45,9 @@ def guardrails_node(state: AgentState) -> dict:
         "channel": configurable.get("message_channel", "text"),
         "status": "generated" if configurable.get("message_channel") == "voice" else "final",
     }
+    if configurable.get("voice_session_id"):
+        message_metadata["voice_session_id"] = configurable["voice_session_id"]
+        message_metadata["source"] = "vita_runtime"
     # El checkpointer conserva el historial, pero estas salidas pertenecen a
     # UN turno. Overwrite evita que operator.add conserve acciones anteriores.
     turn_state = {
@@ -70,7 +74,10 @@ def guardrails_node(state: AgentState) -> dict:
                 AIMessage(
                     content=result.reason or "Mensaje bloqueado por los guardrails.",
                     id=configurable.get("assistant_message_id"),
-                    additional_kwargs=message_metadata,
+                    additional_kwargs={
+                        **message_metadata,
+                        "execution_id": configurable.get("execution_id"),
+                    },
                 )
             ],
         }
@@ -222,6 +229,8 @@ def make_agent_node(
         # state) para que nunca persista en el checkpointer entre turnos: un
         # turno sin contexto no debe heredar la guía del turno anterior.
         configurable = get_config().get("configurable", {})
+        if configurable.get("message_channel") == "voice":
+            system_blocks.append(VOICE_DELIVERY_POLICY)
         control_context = configurable.get("control_context")
         if control_context:
             system_blocks.append(
@@ -271,6 +280,9 @@ def make_agent_node(
                 )
             )
         if not response.tool_calls:
+            response.additional_kwargs.pop("execution_id", None)
+            if configurable.get("execution_id"):
+                response.additional_kwargs["execution_id"] = configurable["execution_id"]
             if configurable.get("assistant_message_id"):
                 response.id = configurable["assistant_message_id"]
             response.additional_kwargs.update(
@@ -281,6 +293,13 @@ def make_agent_node(
                     else "final",
                 }
             )
+            if configurable.get("voice_session_id"):
+                response.additional_kwargs.update(
+                    {
+                        "voice_session_id": configurable["voice_session_id"],
+                        "source": "vita_runtime",
+                    }
+                )
         return {
             # Guardrails ya persistió la entrada; no repetirla tras cada herramienta.
             "messages": [response],

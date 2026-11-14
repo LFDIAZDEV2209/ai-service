@@ -60,6 +60,9 @@ async def thread_state(
             "más nuevo (null/ausente ⇒ página más reciente)."
         ),
     ),
+    sync_voice: bool = Query(
+        default=False, description="BACK: cliente opt-in y consentimiento chat+voz verificados"
+    ),
     graph=Depends(get_graph),
 ) -> ThreadStateResponse:
     """Devuelve una página del historial persistido de un thread (solo del
@@ -71,12 +74,25 @@ async def thread_state(
     respuesta incluye `has_more` y `next_cursor` para pedir la página anterior.
     """
     storage_thread_id = f"{user_id}::{thread_id}"
+    sync_status, bound = None, False
+    if sync_voice:
+        from app.voice.store import VoiceContextError
+        from app.voice.transcript import sync_closed_thread
+
+        try:
+            sync_status, bound = await sync_closed_thread(user_id, thread_id, graph)
+        except VoiceContextError as exc:
+            raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
     snapshot = await graph.aget_state({"configurable": {"thread_id": storage_thread_id}})
 
     # Sin checkpoint el thread nunca existió (404). Un thread que existe pero
     # no tiene mensajes visibles es un historial vacío válido (200 con listas
     # vacías), no un error: la app lo trata como "conversación nueva".
     if snapshot is None or snapshot.created_at is None:
+        if bound:
+            return ThreadStateResponse(
+                thread_id=thread_id, message_count=0, voice_sync_status=sync_status
+            )
         raise HTTPException(status_code=404, detail="Thread no encontrado")
 
     messages = (snapshot.values or {}).get("messages", [])
@@ -101,6 +117,11 @@ async def thread_state(
                 channel=metadata.get("channel", "text"),
                 status=metadata.get("status", "final"),
                 revision=metadata.get("revision", 1),
+                execution_id=metadata.get("execution_id"),
+                source=metadata.get("source"),
+                voice_session_id=metadata.get("voice_session_id"),
+                provider_message_id=metadata.get("provider_message_id"),
+                source_event_id=metadata.get("source_event_id"),
             )
         )
 
@@ -126,6 +147,7 @@ async def thread_state(
 
     return ThreadStateResponse(
         thread_id=thread_id,
+        voice_sync_status=sync_status,
         message_count=len(messages),
         last_message=last_message,
         messages=page,

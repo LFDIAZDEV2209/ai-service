@@ -7,7 +7,7 @@ import pytest
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 
-from app.agents.prompts import PATIENT_SCOPE_POLICY
+from app.agents.prompts import PATIENT_SCOPE_POLICY, VOICE_DELIVERY_POLICY
 from app.agents.runtime_registry import AgentRuntimeRegistry
 from app.graph.graph import build_graph
 from app.vita import runtime
@@ -94,6 +94,7 @@ async def test_base_and_specialist_can_read_facts_without_erp_tool_config(
     monkeypatch.setattr("app.vita.locking.thread_guard", unlocked)
     base = build_graph(model=model, checkpointer=checkpoint)
     config = {"configurable": {"thread_id": "owner::thread", "user_id": "owner"}}
+    config["configurable"]["message_channel"] = channel
     turn = await runtime.resolve_turn(
         user_id="owner",
         text="Mi plan nutricional",
@@ -120,11 +121,21 @@ async def test_base_and_specialist_can_read_facts_without_erp_tool_config(
         assert all(o["provider"] == "openai" for o in model_options)
     assert len(model.prompts) == (1 if channel == "voice" else 2)
     assert all(p[0].content == PATIENT_SCOPE_POLICY for p in model.prompts)
+    for prompt in model.prompts:
+        policies = [message.content for message in prompt if message.type == "system"]
+        assert policies.count(VOICE_DELIVERY_POLICY) == (1 if channel == "voice" else 0)
+    if channel == "voice":
+        assert "no markdown" in VOICE_DELIVERY_POLICY
+        assert "at most one useful question" in VOICE_DELIVERY_POLICY
+        assert "Do not impersonate a human" in VOICE_DELIVERY_POLICY
+        assert "source title" in VOICE_DELIVERY_POLICY
+        assert all(options.get("max_tokens") is None for options in model_options)
 
 
-async def test_classifier_provider_failure_falls_back(monkeypatch):
+@pytest.mark.parametrize("failure", [RuntimeError, TimeoutError])
+async def test_classifier_provider_failure_falls_back(monkeypatch, failure):
     def broken(**_):
-        raise RuntimeError("provider failed")
+        raise failure("provider failed")
 
     monkeypatch.setattr(runtime, "get_chat_model", broken)
     from tests.test_vita_routing import agent

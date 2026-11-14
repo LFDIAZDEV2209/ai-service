@@ -56,11 +56,15 @@ async def test_two_repository_instances_share_revocation_receipts_and_thread_loc
                 patient_id=None,
                 thread_id="fixture-thread",
                 conversation_id=f"conv_{sid}",
+                agent_id="agent_fixture",
                 language="es",
                 revoked=False,
                 expires_at=datetime.now(UTC) + timedelta(minutes=5),
             )
         )
+        assert await first.closed_for_thread("fixture-owner", "fixture-thread") == []
+        with pytest.raises(store.VoiceContextError, match="not_found"):
+            await other_replica.get_owned(sid, "other", "fixture-thread")
         results = await asyncio.gather(
             first.start_turn(sid, 1, 1, "prefix-one", "empty"),
             other_replica.start_turn(sid, 1, 1, "prefix-one", "empty"),
@@ -82,6 +86,12 @@ async def test_two_repository_instances_share_revocation_receipts_and_thread_loc
         with pytest.raises(store.VoiceContextError, match="not_found"):
             await other_replica.revoke(sid, "foreign-owner")
         await first.revoke(sid, "fixture-owner")
+        assert len(await other_replica.closed_for_thread("fixture-owner", "fixture-thread")) == 1
+        assert await other_replica.closed_for_thread("other", "fixture-thread") == []
+        await first.mark_transcript_synced(sid, "a" * 64)
+        bound = await other_replica.get_owned(sid, "fixture-owner", "fixture-thread")
+        assert bound.agent_id == "agent_fixture" and bound.transcript_digest == "a" * 64
+        assert bound.transcript_synced_at is not None
         with pytest.raises(store.VoiceContextError, match="inactive"):
             await other_replica.get(sid)
     finally:

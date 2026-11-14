@@ -46,7 +46,7 @@ async def create_voice_session(payload: VoiceSessionRequest) -> VoiceSessionResp
     if not settings.voice_enabled:
         logger.warning("Voice session solicitada con VOICE_ENABLED=false")
         raise HTTPException(status_code=503, detail="Voz deshabilitada en este entorno.")
-    if settings.vita_voice_enabled:
+    if settings.vita_voice_enabled and payload.supports_vita_voice:
         from app.vita.client import VitaAccessError
         from app.voice.vita_session import create_vita_session
 
@@ -108,10 +108,31 @@ async def create_voice_session(payload: VoiceSessionRequest) -> VoiceSessionResp
         session["conversation_id"] or "-",
     )
 
+    extra = {}
+    if payload.supports_vita_voice:
+        from app.voice.vita_session import reserve_binding
+
+        try:
+            record = await reserve_binding(
+                payload,
+                session,
+                agent_id=settings.elevenlabs_agent_id,
+                version_id=version_id,
+                runtime_mode="legacy",
+            )
+        except VoiceContextError as exc:
+            raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+        extra = {
+            "thread_id": record.thread_id,
+            "session_id": record.id,
+            "expires_at": record.expires_at,
+            "runtime_mode": "legacy",
+        }
     return VoiceSessionResponse(
         signed_url=session["signed_url"],
         agent_id=settings.elevenlabs_agent_id,
         conversation_id=session["conversation_id"],
+        **extra,
     )
 
 

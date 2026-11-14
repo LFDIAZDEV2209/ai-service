@@ -18,6 +18,12 @@ def upgrade() -> None:
         sa.Column("patient_id", sa.String(128)),
         sa.Column("thread_id", sa.String(128), nullable=False),
         sa.Column("conversation_id", sa.String(128), nullable=False, unique=True),
+        sa.Column("agent_id", sa.String(128), nullable=False),
+        sa.Column("version_id", sa.String(128)),
+        sa.Column("runtime_mode", sa.String(16), nullable=False, server_default="vita"),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column("transcript_digest", sa.String(64)),
+        sa.Column("transcript_synced_at", sa.DateTime(timezone=True)),
         sa.Column("language", sa.String(2), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("revoked", sa.Boolean(), nullable=False, server_default=sa.false()),
@@ -25,6 +31,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_ai_vita_voice_sessions_user_id", "vita_voice_sessions", ["user_id"], schema="ai")
     op.create_index("ix_ai_vita_voice_sessions_expires_at", "vita_voice_sessions", ["expires_at"], schema="ai")
+    op.create_index("ix_vita_voice_sessions_owner_thread_created", "vita_voice_sessions", ["user_id", "thread_id", "created_at"], schema="ai")
     op.create_table(
         "vita_voice_turns",
         sa.Column("session_id", sa.String(36), primary_key=True),

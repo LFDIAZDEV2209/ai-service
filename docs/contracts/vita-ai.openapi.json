@@ -248,6 +248,18 @@
             "description": "Cursor de paginación: cuántos mensajes visibles saltear desde el más nuevo (null/ausente ⇒ página más reciente)."
           },
           {
+            "name": "sync_voice",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "BACK: cliente opt-in y consentimiento chat+voz verificados",
+              "default": false,
+              "title": "Sync Voice"
+            },
+            "description": "BACK: cliente opt-in y consentimiento chat+voz verificados"
+          },
+          {
             "name": "x-internal-key",
             "in": "header",
             "required": false,
@@ -509,6 +521,11 @@
             "minLength": 1,
             "title": "Message",
             "description": "Mensaje del usuario"
+          },
+          "supports_vita": {
+            "type": "boolean",
+            "title": "Supports Vita",
+            "default": false
           },
           "thread_id": {
             "anyOf": [
@@ -1008,6 +1025,61 @@
             "type": "integer",
             "title": "Revision",
             "default": 1
+          },
+          "execution_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Id"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "voice_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Session Id"
+          },
+          "provider_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Message Id"
+          },
+          "source_event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Event Id"
           }
         },
         "type": "object",
@@ -1023,6 +1095,17 @@
           "thread_id": {
             "type": "string",
             "title": "Thread Id"
+          },
+          "voice_sync_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Sync Status"
           },
           "message_count": {
             "type": "integer",
@@ -1154,6 +1237,11 @@
               }
             ],
             "title": "Language"
+          },
+          "supports_vita_voice": {
+            "type": "boolean",
+            "title": "Supports Vita Voice",
+            "default": false
           }
         },
         "type": "object",
