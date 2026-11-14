@@ -270,6 +270,7 @@ class AgentRuntimeRegistry:
         *,
         channel: str = "text",
         scope: str | None = None,
+        ground_knowledge: bool = False,
     ) -> CompiledAgent:
         """Overlay explícito SOLO tras autorización Vita; no cambia la config ERP.
 
@@ -282,9 +283,13 @@ class AgentRuntimeRegistry:
         names = {t.name for t in self._select_tools(config.tools, compiled.agent_type_id)}
         config.tools = sorted((names - {"get_patient_data"}) | VITA_READ_TOOL_NAMES)
         prepare = None
-        if channel == "voice":
+        if channel == "voice" or ground_knowledge:
             prepare = [f"get_my_{scope}"] if scope else []
-            if config.retrieval_config.enabled and config.retrieval_config.knowledge_base_ids:
+            if (
+                ground_knowledge
+                and config.retrieval_config.enabled
+                and config.retrieval_config.knowledge_base_ids
+            ):
                 prepare.append("retrieve_knowledge")
         return await self._compile(
             compiled.agent_type_id,

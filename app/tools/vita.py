@@ -39,30 +39,30 @@ def make_context_tool(name: str, scope: Scope, description: str) -> StructuredTo
 get_my_day = make_context_tool(
     "get_my_day",
     "day",
-    "Lee el programa y tareas efectivos de hoy del paciente autenticado.",
+    "Read my effective program and tasks for today / programa y tareas de hoy.",
 )
 get_my_nutrition = make_context_tool(
     "get_my_nutrition",
     "nutrition",
-    "Lee solo el menú publicado vigente de hoy; nunca borradores.",
+    "Read today's current published nutrition plan and meals / plan nutricional y menú; no drafts.",
 )
 get_my_assessments = make_context_tool(
     "get_my_assessments",
     "assessments",
-    "Lee tests asignados propios; no responde ni envía tests.",
+    "Read my assigned tests / mis evaluaciones; never answer or submit them.",
 )
 get_my_podcast = make_context_tool(
     "get_my_podcast",
     "podcast",
-    "Lee el podcast asignado hoy y su atajo autorizado; abrir no da XP.",
+    "Read my assigned podcast and authorized shortcut / podcast asignado; no XP on open.",
 )
 get_my_exercise = make_context_tool(
     "get_my_exercise",
     "exercise",
-    "Lee rutina efectiva o descanso explícito de hoy sin cambiarla.",
+    "Read my effective exercise or rest day / rutina o descanso de hoy; no changes.",
 )
 get_my_progress = make_context_tool(
     "get_my_progress",
     "progress",
-    "Lee progreso registrado con periodo y fuentes, sin juicio clínico.",
+    "Read my recorded progress with period/sources / mi progreso; no clinical judgments.",
 )

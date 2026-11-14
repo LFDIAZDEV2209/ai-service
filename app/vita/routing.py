@@ -153,9 +153,44 @@ async def select_agent(
     return RouteDecision(None, "general" if not scored else "clarification")
 
 
+def documentation_query(text: str) -> bool:
+    """Intención documental ES/EN; no confunde un test personal con su protocolo."""
+    return bool(
+        re.search(
+            r"\b(documentacion|documentos?|documentation|documents?|manual|manuales|"
+            r"protocolo|protocolos|protocols?|guia|guias|guidelines?|fuentes?|sources?|"
+            r"bibliografia|bibliography|rag|material (?:cargado|adjunto)|uploaded|attached)\b",
+            _positive_text(text),
+        )
+    )
+
+
+def service_query(text: str) -> bool:
+    """Servicio/saludo sin lectura de ficha ni recuperación documental."""
+    return _service_query(normalize(text))
+
+
 def capability_scope(text: str) -> str | None:
     """Atajos a lecturas; los datos reales y sus permisos siempre vienen de BACK."""
     text = _positive_text(text)
+    # Una pregunta conceptual/documental nunca se convierte en una lectura
+    # personal por contener «tests», «ejercicios» o «rutina».
+    personal = bool(
+        re.search(
+            r"\b(mi|mis|me|my|mine|tengo|asignad[oa]s?|assigned|hoy|today|pendientes?|"
+            r"pending|para hoy|for today|que puedo|what can i)\b",
+            text,
+        )
+    )
+    if documentation_query(text) and not (
+        personal and re.search(r"\b(plan|menu|almuerzo|lunch|podcast)\b", text)
+    ):
+        return None
+    if not personal and not re.search(
+        r"\b(abre|abrir|muestra|muestrame|ver|pon|reproduce|open|show|play|tasks|tareas)\b",
+        text,
+    ):
+        return None
     patterns = {
         "nutrition": r"\b(almuerzo|desayuno|cena|comida|menu|meal|lunch|breakfast|"
         r"plan nutricional|alimentacion|mi dieta|my diet|nutrition plan|food plan|eating plan)\b",

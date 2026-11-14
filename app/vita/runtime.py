@@ -8,16 +8,24 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, TypeAdapter
 
+from app.agents.knowledge_scope import resolve_knowledge_base_ids
 from app.agents.runtime_registry import AgentRuntimeError
 from app.agents.runtime_registry import registry as runtime_registry
 from app.core.config import get_settings
 from app.graph.graph import build_graph
 from app.llm.factory import get_chat_model
 from app.tools.registry import TOOLS_BY_NAME, legacy_tools
+from app.tools.retrieval import make_retrieve_tool
 from app.tools.vita import VITA_READ_TOOL_NAMES
 from app.vita.client import VitaAccessError, read_catalog
 from app.vita.locking import LockedGraph
-from app.vita.routing import AuthorizedAgent, capability_scope, select_agent
+from app.vita.routing import (
+    AuthorizedAgent,
+    capability_scope,
+    documentation_query,
+    select_agent,
+    service_query,
+)
 
 
 class Classification(BaseModel):
@@ -97,12 +105,18 @@ async def resolve_turn(
         channel=channel,
         classifier=None if scope else classify,
     )
-    if decision.agent is not None and (scope is None or (explicit and explicit != "base")):
+    if decision.agent is not None:
         agent = decision.agent
         compiled = await runtime_registry.get_agent(agent.runtime_key, session)
         if compiled.version_id != agent.version_id:
             raise VitaAccessError("vita_version_not_synced")
-        compiled = await runtime_registry.with_vita_reads(compiled, channel=channel, scope=scope)
+        compiled = await runtime_registry.with_vita_reads(
+            compiled,
+            channel=channel,
+            scope=scope,
+            ground_knowledge=(scope is None or documentation_query(text))
+            and not service_query(text),
+        )
         cfg = compiled.runtime_config
         return ResolvedTurn(
             LockedGraph(compiled.graph, decision.reason),
@@ -124,12 +138,21 @@ async def resolve_turn(
         ]
     )
     settings = get_settings()
+    # La ruta general también usa el catálogo ERP: únicamente KBs Global
+    # activas, nunca documentos de un especialista que no fue seleccionado.
+    prepare = [f"get_my_{scope}"] if scope else []
+    # Los saludos y ayudas de servicio permanecen inmediatos y sin RAG.
+    if (scope is None or documentation_query(text)) and not service_query(text):
+        ids = await resolve_knowledge_base_ids(session, "base", [])
+        if ids:
+            tools.append(make_retrieve_tool(knowledge_base_ids=ids))
+            prepare.append("retrieve_knowledge")
     graph = build_graph(
         model=get_chat_model(temperature=None),
         checkpointer=base_graph.checkpointer,
         tools=tools,
         max_tool_calls=3,
-        prepare_tools=([f"get_my_{scope}"] if scope else []) if channel == "voice" else None,
+        prepare_tools=prepare if channel == "voice" or "retrieve_knowledge" in prepare else None,
     )
     return ResolvedTurn(
         LockedGraph(graph, "capability" if scope else decision.reason),

@@ -1,5 +1,37 @@
 # Runtime Vita — implementación local
 
+## Corrección de orquestación y documentación — 14-11-2026
+
+La voz legacy de ElevenLabs carecía de tools de la app y su prompt negaba acceso
+a datos personales. El modo integral usa Custom LLM: las seis tools autorizadas y
+`retrieve_knowledge` se ejecutan en el runtime común, no como webhooks duplicados
+en el proveedor. El panel ElevenLabs muestra el Custom LLM y la tool nativa de idioma;
+la evidencia de las tools de datos está en la ejecución del grafo y sus fuentes.
+
+La selección de especialista ya no se descarta al detectar una capacidad personal.
+Palabras como test/rutina/ejercicio por sí solas no autorizan consultar una ficha:
+las preguntas sobre protocolos/documentación siguen la ruta documental. Se mantienen
+los canales y el catálogo autorizado de BACK; un agente creado pero no autorizado
+para el paciente no se puede seleccionar por su nombre.
+
+Para temas de un especialista se prepara `retrieve_knowledge` antes de una sola
+generación de respuesta, tanto en texto como en voz. Se respeta `retrieval.enabled`
+y el alcance actual de KBs activas propias + Global; el fallback general solo consulta
+Global. Los documentos deben estar `Listo` y su KB `Activo`, con chunks indexados.
+Saludos, identidad y ayuda de servicio no hacen RAG ni cargan datos personales.
+No se afirma que una fuente fue consultada sin fragmentos devueltos en ese turno.
+
+ES/EN usa `language_detection` mediante function calls OpenAI. El ciclo de idioma
+precede al recibo del turno y no genera otro mensaje del paciente ni otra respuesta.
+Solo se admite el retorno de esa tool del proveedor; sus prompts, modelos y otras
+tools no configuran el runtime ni conceden acceso. El idioma de intervenciones claras
+se conserva para respuestas neutras como «OK».
+
+Regresión local: 698 pruebas correctas, 2 PostgreSQL omitidas por no disponer de su
+URI aislada en ese comando, 32 avisos heredados. Casos nuevos cubren documentación
+ES/EN, especialista y fallback Global, saludos sin RAG y ciclo de idioma sin doble
+generación. Esto no acredita por sí solo contenido, asignaciones o audio en producción.
+
 Rama `feature/vita-app-orchestration`, base `cbbe9e2` sobre `a576191`. Contrato
 canónico del workspace: `openspec/changes/vita-asistente-integral/CONTRATOS-VITA.md`.
 Respuesta de coordinación: `RESPUESTA-AI-CONTRATO.md` del mismo change. Sin push,

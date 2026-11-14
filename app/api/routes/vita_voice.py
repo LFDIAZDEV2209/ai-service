@@ -24,6 +24,13 @@ from app.vita.client import VitaAccessError, read_catalog
 from app.vita.locking import ThreadBusyError
 from app.vita.runtime import resolve_turn
 from app.voice.context import verify_context
+from app.voice.language import (
+    conversation_language,
+    language_chunk,
+    language_switch,
+    latest_user_index,
+    valid_language_followup,
+)
 from app.voice.store import VoiceContextError, voice_store
 
 logger = logging.getLogger(__name__)
@@ -33,6 +40,8 @@ router = APIRouter(prefix="/internal/voice/v1", tags=["voice-runtime"])
 class ProviderMessage(BaseModel):
     role: Literal["system", "developer", "user", "assistant", "tool"]
     content: str | None = Field(default=None, max_length=8000)
+    tool_calls: list[dict] = Field(default_factory=list, max_length=4)
+    tool_call_id: str | None = Field(default=None, max_length=200)
 
 
 class CompletionRequest(BaseModel):
@@ -40,6 +49,7 @@ class CompletionRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
     stream: Literal[True]
     messages: list[ProviderMessage] = Field(min_length=1, max_length=128)
+    tools: list[dict] = Field(default_factory=list, max_length=16)
 
     @model_validator(mode="before")
     @classmethod
@@ -64,7 +74,10 @@ class CompletionRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_history(self):
-        if self.messages[-1].role != "user" or not (self.messages[-1].content or "").strip():
+        index = latest_user_index(self.messages)
+        if index < 0 or not (self.messages[index].content or "").strip():
+            raise ValueError("last_user_message_required")
+        if self.messages[-1].role != "user" and not valid_language_followup(self.messages):
             raise ValueError("last_user_message_required")
         if sum(len(m.content or "") for m in self.messages) > 64_000:
             raise ValueError("history_limit")
@@ -142,6 +155,34 @@ async def completion(
         await read_catalog(record.user_id)
         _check_rate_limit(http_request, record.user_id)
         ordinal, prefix, previous = history_identity(payload.messages)
+        switch = language_switch(payload.messages, payload.tools, record.language)
+        if switch:
+
+            async def switch_language():
+                response_id = f"voice:{session_id}:{ordinal}"
+                data = {
+                    "id": response_id,
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": "vita",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"tool_calls": [language_chunk(response_id, switch)]},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+                yield f"data: {json.dumps(data)}\n\n"
+                data["choices"] = [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]
+                yield f"data: {json.dumps(data)}\n\n"
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(
+                switch_language(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-store"},
+            )
         receipt = await voice_store.start_turn(session_id, ordinal, x_vita_turn, prefix, previous)
     except VoiceContextError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
@@ -149,11 +190,11 @@ async def completion(
         raise HTTPException(status_code=403, detail="voice_access_unavailable") from exc
 
     request = ChatRequest(
-        message=payload.messages[-1].content,
+        message=payload.messages[latest_user_index(payload.messages)].content,
         user_id=record.user_id,
         patient_id=record.patient_id,
         thread_id=record.thread_id,
-        language=record.language,
+        language=conversation_language(payload.messages, record.language),
     )
     config = _build_config(record.thread_id, request)
     config["configurable"].update(

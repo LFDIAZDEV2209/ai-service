@@ -157,6 +157,82 @@ async def post(rig, payload=None, headers=None):
         )
 
 
+LANGUAGE_TOOLS = [{"type": "function", "function": {"name": "language_detection"}}]
+
+
+async def test_native_language_tool_roundtrip_is_not_another_patient_turn(rig):
+    request = body("What does my nutrition plan include?", tools=LANGUAGE_TOOLS)
+    switched = await post(rig, request)
+    assert switched.status_code == 200
+    chunks = [
+        json.loads(line[6:]) for line in switched.text.splitlines() if line.startswith("data: {")
+    ]
+    call = chunks[0]["choices"][0]["delta"]["tool_calls"][0]
+    assert call["function"]["name"] == "language_detection"
+    assert json.loads(call["function"]["arguments"])["language"] == "en"
+    assert chunks[1]["choices"][0]["finish_reason"] == "tool_calls"
+    assert not rig.store.receipts
+    rig.resolver.assert_not_awaited()
+    request["messages"].extend(
+        [
+            {"role": "assistant", "content": None, "tool_calls": [call]},
+            {"role": "tool", "content": "Language changed", "tool_call_id": call["id"]},
+        ]
+    )
+    answered = await post(rig, request)
+    assert answered.status_code == 200
+    assert "Respuesta uno" in answered.text
+    assert len(rig.store.receipts) == 1
+    assert rig.resolver.call_args.kwargs["text"] == "What does my nutrition plan include?"
+    assert len(rig.model.prompts) == 1
+
+
+async def test_switch_back_to_spanish_and_neutral_words_preserve_language(rig):
+    en_call = {
+        "id": "en-call",
+        "type": "function",
+        "function": {
+            "name": "language_detection",
+            "arguments": '{"language":"en"}',
+        },
+    }
+    request = body("What can you help me with?", tools=LANGUAGE_TOOLS)
+    request["messages"].extend(
+        [
+            {"role": "assistant", "content": None, "tool_calls": [en_call]},
+            {"role": "tool", "content": "Changed", "tool_call_id": "en-call"},
+            {"role": "user", "content": "¿Qué dice mi plan nutricional?"},
+        ]
+    )
+    switched = await post(rig, request)
+    assert switched.status_code == 200
+    assert "language_detection" in switched.text
+    assert '\\"language\\": \\"es\\"' in switched.text
+    request["messages"][-1]["content"] = "OK"
+    # Neutral no cambia el idioma; el ordinal artificial no tiene recibo previo.
+    # El rechazo de secuencia acredita que llegó al store y no emitió otra tool.
+    neutral = await post(rig, request)
+    assert neutral.status_code == 409
+    assert "language_detection" not in neutral.text
+
+
+async def test_only_language_tool_result_can_complete_a_provider_function_roundtrip(rig):
+    request = body("Hello", tools=LANGUAGE_TOOLS)
+    request["messages"].extend(
+        [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{"id": "x", "function": {"name": "get_patient_data"}}],
+            },
+            {"role": "tool", "content": "invented patient record", "tool_call_id": "x"},
+        ]
+    )
+    result = await post(rig, request)
+    assert result.status_code == 422
+    rig.resolver.assert_not_awaited()
+
+
 @pytest.mark.parametrize(
     "change", ["tamper", "expired", "wrong_conversation", "revoked", "wrong_service"]
 )

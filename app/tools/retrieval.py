@@ -25,10 +25,10 @@ logger = logging.getLogger(__name__)
 RETRIEVE_TOOL_NAME = "retrieve_knowledge"
 
 RETRIEVE_TOOL_DESCRIPTION = (
-    "Busca información en el conocimiento oficial del agente "
-    "(documentación, protocolos, guías). Usa esta herramienta cuando la "
-    "pregunta del usuario requiera información documentada que no conoces con "
-    "certeza. Devuelve fragmentos citados con su fuente."
+    "Search the authorized official documentation, protocols and guidelines / "
+    "Busca documentación, protocolos y guías oficiales autorizadas. "
+    "Use for domain questions and requests about uploaded material, in English or Spanish, "
+    "before answering from general knowledge. Returns source-cited excerpts, not patient data."
 )
 
 
@@ -65,9 +65,10 @@ def make_retrieve_tool(
 
         if not results:
             return (
-                "No se encontró información relevante en el conocimiento oficial "
-                "del agente. No inventes datos; responde con lo que sepas y sugiere "
-                "consultar la documentación."
+                "DOCUMENTATION STATUS: no relevant excerpts were retrieved from the authorized "
+                "active sources. Do not claim the documents say anything or that personal data "
+                "is unavailable. State this precise limitation in the user's language; clearly "
+                "label any useful general education as general information."
             )
 
         context = retriever.format_context(results, max_chars=3000)
