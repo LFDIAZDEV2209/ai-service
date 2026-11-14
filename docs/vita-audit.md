@@ -31,7 +31,7 @@ desde fuera. El estado vivo de tab 1 sigue sin verificar.
 | Backend `GetPatientAiContextQuery.cs`: comidas del día, medidas, dispositivos y diagnóstico | No equivale a toda la app; vigencia/menú se resuelven con lógica del backend |
 | Runtime `tools=[]` significa todas | Registrar nuevas escrituras sin política explícita las expondría a agentes legados |
 | `app/graph/nodes.py`: política permite citas salvo WhatsApp; registro contiene appointment | Explica que el chat de la captura siga ofreciendo citas aunque la voz ya no lo haga |
-| App `services/chat/chat-service.ts`: POST chat sin streaming | El backend tiene SSE pero la pantalla no recibe el primer texto progresivamente |
+| Servicio chat-service ofrece POST sin streaming, pero la revisión del consumidor final AppContext por vita-app confirma streaming ya conectado | Corregir parser/errores/cancelación de la ruta realmente utilizada; no duplicar streaming por haber revisado solo un servicio |
 | App `utils/chatNutritionVisibility.ts`: flag independiente de nutrición del chat | Capacidades/atajos deben respetar disponibilidad real del cliente y coordinar la activación |
 | App `components/VoiceOverlay.tsx`: modal inmersivo, un userLine/botLine y espejo solo de pares completos | La transcripción no se ve progresivamente en el hilo; no acredita persistencia de voz |
 | Callback de voz interpreta `type/user_transcript/agent_response`; el SDK instalado entrega `message`, `role/source`, `event_id` | Incompatibilidad comprobada: el manejador ignora los callbacks normalizados; corregir antes de extender el espejo |

@@ -1,0 +1,213 @@
+# Runtime Vita — implementación local
+
+Rama `feature/vita-app-orchestration`, base `cbbe9e2` sobre `a576191`. Contrato
+canónico del workspace: `openspec/changes/vita-asistente-integral/CONTRATOS-VITA.md`.
+Respuesta de coordinación: `RESPUESTA-AI-CONTRATO.md` del mismo change. Sin push,
+despliegue, secretos nuevos ni cambios de configuración remota desde este carril.
+
+## Activación y compatibilidad
+
+`VITA_RUNTIME_ENABLED=false` y `VITA_VOICE_ENABLED=false` por defecto. El adaptador
+también exige `VOICE_ENABLED` y `VITA_VOICE_TRANSPORT_VERIFIED`, una versión y agente
+Custom LLM dedicados y secretos configurados. El modo remoto anterior permanece como
+camino legado. No se modifica `docs/elevenlabs/agent-config.md` del carril raíz.
+
+La identidad/política educativa de Vita se inyecta desde código en general,
+especialistas, rondas de herramientas y voz. ERP, memoria, documentos e historial
+son referencias de menor autoridad. Se mantienen controles de programa, idioma por
+turno y orientación a SOS. No se ofrecen citas/CTA. `suggest_appointment` se filtra
+tanto al enlazar como al ejecutar, incluso si una configuración antigua la enumera.
+La verificación opcional de voz legada rechaza herramientas de citas adjuntas.
+
+`tools=[]` en configuración ERP conserva exclusivamente este conjunto congelado:
+`calculate`, `get_current_time`, `get_patient_data`, `mark_control_declined`,
+`suggest_appointment` (esta última deshabilitada para paciente). Nuevos registros
+no se heredan. `build_graph(tools=[])` sí significa ninguna herramienta. La misma
+selección se utiliza para enlazar y ejecutar; llamadas desconocidas o fuera del
+alcance no ejecutan nada. Las tools de perfil no amplían esa lista accidentalmente.
+
+## Lecturas de la app
+
+| Tool sin argumentos | Scope BACK |
+| --- | --- |
+| `get_my_day` | `day` |
+| `get_my_nutrition` | `nutrition` |
+| `get_my_assessments` | `assessments` |
+| `get_my_podcast` | `podcast` |
+| `get_my_exercise` | `exercise` |
+| `get_my_progress` | `progress` |
+
+GET `/api/v1/internal/vita/context?userId=&scope=` con clave interna. La identidad
+sale de `configurable.user_id`, derivada del JWT por BACK. Argumentos de identidad,
+fecha o paciente enviados por el modelo se rechazan antes de ejecutar. Sin identidad
+no hay consulta. No se leen schemas de planes ni se calculan vigencia, nutrición o XP.
+
+Se conservan `ok/empty/unavailable/forbidden/stale`, fecha local, revisión, datos,
+acciones y procedencia del envelope BACK. 404 de una fachada inexistente es
+`unavailable`, no prueba de ausencia de plan. Se rechazan acciones con URL/destino
+arbitrario y respuestas mayores a 64 KB; los estados no `ok` no emiten acciones.
+Timeout HTTP total por lectura: 3 s por defecto. No hay reintentos automáticos.
+
+Las seis lecturas se conceden explícitamente en el runtime Vita **después** de
+validar paciente/consentimiento mediante el catálogo BACK. También están disponibles
+para un especialista autorizado sin exigir reconfigurar versiones ERP previas. Este
+overlay de código no concede escrituras, no hereda `get_patient_data` grueso y no
+interpreta metadata como permisos. La configuración ERP almacenada no se modifica.
+
+Ante «marca mi rutina/podcast como completado» se consulta el contenido vigente y
+se ofrece únicamente navegación. APP prepara y confirma con JWT y las APIs canónicas.
+El prompt prohíbe afirmar completación/XP sin resultado registrado de BACK. Abrir,
+escuchar o consultar nunca completa ni concede XP. Tests no se contestan ni envían.
+
+## Catálogo, modelo y RAG
+
+GET `/api/v1/internal/vita/agents?userId=` se consulta por turno. Se consume el array
+BACK `id/runtimeKey/slug/name/description/specialty/versionId/versionNumber/routing`.
+`routing` solo contiene `topics/keywords/channels`. Selección explícita por GUID/slug,
+reglas del catálogo y continuidad breve. Canal vacío excluye el agente. Un agente
+nuevo no requiere otro slug en código. El clasificador estructurado se usa solo
+ante empate temático entre candidatos autorizados; fallos del proveedor degradan a
+general/aclaración. Saludos compuestos, identidad, agradecimientos, ayuda de app y
+entradas largas sin evidencia temática no llaman a otro LLM.
+
+Se ejecuta la configuración/modelo/proveedor reales de la versión seleccionada.
+Discrepancia catálogo/runtime falla cerrada. La caché revalida fila activa, versión,
+configuración y alcance RAG cada turno. Se conserva precedencia GUID en la ruta
+legada. No hay herramienta de transferencia recursiva: máximo un especialista/turno.
+
+RAG conserva globales activas y bases propias autorizadas. Sin IDs no se consulta ni
+se genera embedding. El SQL existente exige documento `Listo` y KB `Activo`; se
+mantiene ese filtro. Cambios de configuración o KB recompilan. Resultados de tools
+de turnos anteriores no se reintegran como evidencia vigente. Las fuentes del turno
+se entregan en `sources`; no se copian PDFs a ElevenLabs. Las respuestas históricas
+siguen siendo historial, no autoridad de una fuente todavía activa.
+
+## Presupuestos y observabilidad
+
+Para ERP (`AgentRuntimeConfig`), campos opcionales documentados para vita-erp:
+
+| Campo | Default | Validación |
+| --- | --- | --- |
+| `max_tool_calls` | 8 | 0..16 |
+| `tool_timeout_seconds` (nuevo) | 3 | >0..8 s |
+| `recursion_limit` (existente) | 25 | 3..50 |
+
+No se añaden campos al DTO de catálogo ni se exige editor de budgets para activar
+las lecturas. El backend debe mantener un recursion_limit suficiente para las rondas
+permitidas. Ruta general: máximo 3 llamadas. Lotes fuera de presupuesto se rechazan
+sin efectos; una respuesta final acotada evita bucles de un modelo que insiste.
+Las llamadas incompletas no se reenvían huérfanas en el siguiente turno.
+
+`VITA_TURN_TIMEOUT=20` limita generación/herramientas, tanto sync como SSE. La
+resolución previa tiene límites HTTP de 3 s y clasificador de 2 s. Cancelar propaga
+cancelación al grafo/tools HTTP. La limpieza de voz se protege del CancelScope de
+Starlette. Los logs nuevos contienen agente/versión/motivo/tiempos/estado; no tokens,
+transcripciones o PHI. ExecutionTracker de Vita omite preguntas, respuestas y memorias
+en trazas técnicas; el checkpoint mantiene el historial autorizado. No hay benchmark
+p50/p95 de dispositivo ni se atribuye una causa al atasco de audio reportado.
+
+## Adaptador de voz
+
+POST `/internal/voice/session` mantiene los campos snake_case previos y añade en
+modo Vita `thread_id/session_id/session_token/expires_at/runtime_mode`. BACK convierte
+a camelCase. Si falta hilo se crea uno; el checkpoint siempre usa
+`user_id::thread_id`. BACK conserva la autorización del hilo visible. Un ID ajeno
+nunca abre el namespace del otro usuario.
+
+Token opaco `v1.payload.signature`, HMAC-SHA256, audiencia `vita-custom-llm`, TTL máximo
+600 s. Claims visibles: `sid/aud/exp`; sin usuario, paciente, JWT ni datos clínicos.
+Identidad, hilo, conversación, expiración y revocación viven en `ai.vita_voice_sessions`.
+Secretos dedicados: `VITA_VOICE_CONTEXT_SECRET` y `VITA_VOICE_SERVICE_KEY`, mínimo
+32 bytes. Versión/agente: `VITA_ELEVENLABS_VERSION_ID`, `VITA_ELEVENLABS_AGENT_ID`.
+
+DELETE `/internal/voice/session/{id}?user_id=` con clave interna: solo propietario,
+idempotente 204, ajeno/inexistente 404. Se comprueba sesión durable cada 250 ms mientras
+el runtime espera y consentimiento/catálogo cada segundo. Revocar cancela generación
+y herramientas pendientes. No existe endpoint que importe respuestas arbitrarias de bot.
+
+POST `/internal/voice/v1/chat/completions`: autenticación `Authorization: Bearer`
+con clave de servicio dedicada más tres cabeceras:
+
+| Cabecera | Dynamic variable |
+| --- | --- |
+| `X-Vita-Session` | `secret__vita_session_token` |
+| `X-Vita-Conversation` | `system__conversation_id` |
+| `X-Vita-Turn` | `system__agent_turns` |
+
+Configurar **CustomLLM.url BASE terminada `/v1`**; el proveedor añade
+`/chat/completions`. Usar `custom_llm.api_key: {"secret_id":"..."}`; un Authorization
+literal en `request_headers` fue sustituido por el proveedor en el POC real.
+`request_headers` usa objetos `{"variable_name":"..."}`. APP entrega únicamente el
+token reducido como dynamic variable al iniciar; nunca el JWT del paciente.
+
+El body compatible acepta `stream:true/messages`. Solo se procesa la última entrada
+`user`; system/developer/assistant/tool del proveedor no sustituyen el historial ni
+autorizan instrucciones. Se ignoran overrides de modelo/tools/KBs y se rechazan
+identidades extra en el body. Contador del proveedor más ordinal/huella del prefijo
+de entradas `user` ligan cada turno a la sesión. Replay completado recupera el
+checkpoint sin generar otra vez; replay en vuelo/interrumpido o contenido cambiado
+devuelve 409. Frases iguales con ordinales distintos son turnos distintos. Historial
+recortado/reordenado se rechaza; no hay deduplicación por igualdad de texto.
+
+Voz prepara en código la capacidad solicitada y RAG del especialista (si procede),
+con las herramientas comunes. Después el nodo `answer`, sin herramientas enlazadas,
+emite texto progresivo con una sola generación. El adaptador solo transmite ese nodo,
+filtra bloques thinking/internos y produce SSE Chat Completions + `[DONE]`. Se probó
+por ASGI que el primer contenido sale mientras la generación todavía está detenida.
+El tiempo `first_token_ms` comienza al entrar al endpoint e incluye su resolución.
+
+`ai.vita_voice_turns` guarda recibos/huellas/estado, no otra copia del transcript.
+Bloqueo `SELECT FOR UPDATE` de sesión y unicidad `(session_id, ordinal)`/contador;
+advisory lock transaccional por hilo para texto/voz entre conexiones/réplicas. Todo
+ello requiere PostgreSQL, no un dict de proceso. Migración nueva `fe62a09c1741`, solo
+schema `ai`. **No se aplicó a la BD compartida ni se verificaron réplicas reales.**
+
+## Evidencia y límites de integración
+
+Pruebas locales: `tests/test_vita_{contract,routing,runtime,safety,voice}.py`, regresiones
+existentes de agentes, RAG, idiomas, voz, chat, hilos y controles. Modelos fake sin
+keys, HTTP MockTransport y ASGI. Cubren identidad, estado/acciones, datos base y
+especialista ES/EN, límites, cancelación, token manipulado/expirado, conversación
+ajena, revocación en vuelo, cabeceras, replay y frases iguales distintas.
+
+`tests/test_vita_postgres.py` es opt-in: exige `VITA_TEST_DATABASE_URL` de una DB local
+aislada cuyo nombre contenga `test`. Crea/retira un schema temporal solo allí; prueba
+dos repositorios/conexiones, revocación, recibos y advisory lock. Sin esa variable
+queda skipped: **migración y concurrencia durable continúan pendientes de integración**.
+Los SQL de upgrade/rollback se exportaron offline, sin ejecutar sobre ninguna BD.
+
+Contrato local reusable: `docs/contracts/vita-ai.openapi.json`, más SQL offline.
+Reproducir: `uv run python scripts/export_vita_contract.py`. No se inicializó/publicó
+un workspace Postman; el ejecutable disponible era el launcher de Windows, sin CLI
+operativo. La evidencia upstream usa el transporte simulado autorizado por la misión.
+
+El POC real del coordinador (`POC-TRANSPORTE-VOZ.md`) acredita exclusivamente dos
+turnos textuales iguales con token/conversación correctos, contador/user_count 1→2,
+autenticación dedicada y SSE. No acredita seguridad del runtime, audio móvil,
+reintentos, recorte, interrupción o correlación de IDs. El POC adicional de IDs fue
+rechazado por aprobación automática al abrir el túnel y no se sorteó.
+
+El historial añade `message_id/channel/status/revision`. Voz usa `provider_input`
+para entrada recibida y `generated` para respuesta generada: **no son prueba de audio
+heard/final ni de correspondencia con event_id/response_id del SDK**. APP no debe
+fusionar esos IDs por inferencia ni volver a enviar la transcripción como otra pregunta.
+Correcciones y texto realmente escuchado requieren correlación/interrupción verificadas.
+No se cierra aceptación 4.2/4.4/4.5 ni QA integral por haber probado el transporte.
+Modo Vita permanece apagado hasta migración, integración BACK/APP y esas verificaciones.
+
+## Cierre de validación local (14-11-2026)
+
+- `uv sync --locked`: dependencias del lock instaladas, sin actualizar `uv.lock`.
+- `uv run ruff check .`: correcto.
+- `uv run pytest -q`: **623 passed, 1 skipped**, 27.80 s. El skip corresponde al
+  PostgreSQL opt-in descrito arriba. 32 warnings existentes: deprecación Starlette/
+  httpx y `FakeDbSession.add` asíncrono del doble legado; no fallos de producto.
+- `uv run pytest tests/test_vita_voice.py -k first_final_token -q`: 1 passed;
+  primer contenido HTTP ASGI antes de liberar el final de la generación sintética.
+- `uv run python scripts/export_vita_contract.py`: OpenAPI y upgrade/rollback SQL
+  offline generados correctamente. Ninguna migración ejecutada sobre BD compartida.
+- `git diff --check`: correcto antes de commit. Sin API keys LLM, llamadas LLM
+  de producción, datos clínicos reales, push ni activación remota desde este carril.
+
+Root integrará/pusheará a dev según la autorización de Luis, verificará CI y
+despliegues. Este carril entrega únicamente commits locales y handoff.
