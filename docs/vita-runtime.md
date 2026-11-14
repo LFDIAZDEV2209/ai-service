@@ -292,3 +292,24 @@ bloqueado por la variante síncrona durante RAG. Providers síncronos inyectados
 compatibilidad se ejecutan en thread; los providers propios tienen método async.
 Regresión local: cancelación llega al proveedor async y no se inicia consulta SQL
 ni se utiliza un resultado tardío. No se llamaron APIs reales de embeddings.
+# Incidente de conexión — 14-11-2026
+
+ElevenLabs US devuelve en producción un JSON con `signed_url` únicamente; con
+`include_conversation_id=true`, la conversación reservada está en el parámetro
+`conversation_id` de ese URL. El cliente anterior solo leía el campo del JSON:
+el enlace durable de clientes opt-in rechazaba la sesión con 502 antes del SDK.
+CloudWatch mostraba emisión correcta seguida de 502 en `/internal/voice/session`.
+
+El cliente conserva la credencial original y extrae el ID de la respuesta autenticada
+del proveedor, aceptando también el campo JSON anterior. Si ambas fuentes existen
+deben coincidir; valores vacíos, repetidos, inválidos o de más de 128 caracteres se
+rechazan sin registrar URL/firma. No se acepta un ID aportado por el paciente.
+No cambia el endpoint, los consentimientos, las claves ni los modos de runtime.
+
+La regresión reproduce el recorrido HTTP completo de sesión legacy vinculada con
+el JSON real de un solo campo; antes devolvía 502 y después devuelve 200 con vínculo.
+Una prueba sintética real con el cliente corregido verificó que el ID reservado
+coincide con el evento WebSocket, recibió audio y dos respuestas. Se eliminó esa
+conversación. Una muestra: firma 1628 ms, primer texto 525 ms y primer audio 670 ms
+desde apertura de WebSocket; no representan latencia de micrófono/playback en iPhone
+ni percentiles. Configuración compartida del agente sin modificaciones.

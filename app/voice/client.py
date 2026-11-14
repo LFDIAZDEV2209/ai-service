@@ -11,7 +11,7 @@ import hashlib
 import json
 import logging
 import re
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
 
@@ -128,9 +128,29 @@ async def create_signed_url(
         logger.error("Voice session: respuesta de ElevenLabs inválida")
         raise VoiceSessionError("Respuesta inválida de ElevenLabs.", status=502)
 
+    # ElevenLabs US devuelve el ID reservado dentro del URL aunque el JSON
+    # solo contenga signed_url. No inferirlo del SDK/cliente ni inventar un ID.
+    try:
+        query_ids = parse_qs(parsed_url.query, keep_blank_values=True, max_num_fields=64).get(
+            "conversation_id", []
+        )
+        body_id = body.get("conversation_id")
+        if len(query_ids) > 1 or any(
+            not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value)
+            for value in [*query_ids, *([body_id] if body_id is not None else [])]
+        ):
+            raise ValueError
+        url_id = query_ids[0] if query_ids else None
+        if body_id is not None and url_id is not None and body_id != url_id:
+            raise ValueError
+        conversation_id = body_id if body_id is not None else url_id
+    except ValueError as exc:
+        logger.error("Voice session: identificador reservado inválido o contradictorio")
+        raise VoiceSessionError("Respuesta inválida de ElevenLabs.", status=502) from exc
+
     # Nunca loguear el signed_url (es la credencial temporal del paciente).
     logger.info("Voice session: signed URL emitido (agent_id=%s)", agent_id)
-    return {"signed_url": signed_url, "conversation_id": body.get("conversation_id")}
+    return {"signed_url": signed_url, "conversation_id": conversation_id}
 
 
 def _disabled_overrides(value: object) -> bool:

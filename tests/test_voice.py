@@ -2,6 +2,7 @@
 
 import json
 from copy import deepcopy
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -67,6 +68,90 @@ def _post(language="es", headers=HEADERS):
 def test_requires_internal_key(monkeypatch):
     _transport(monkeypatch, lambda _: pytest.fail("must not contact provider"))
     assert _post(headers={}).status_code == 401
+
+
+def test_provider_url_only_response_starts_linked_legacy_session(monkeypatch):
+    """Forma real de ElevenLabs US: ID reservado dentro del URL, no en el JSON."""
+    store = AsyncMock()
+    monkeypatch.setattr("app.voice.vita_session.voice_store.create", store)
+
+    def handler(request):
+        if request.url.path.endswith("/agents/agent_test"):
+            return httpx.Response(200, json=_configuration("es"))
+        assert request.url.params["include_conversation_id"] == "true"
+        return httpx.Response(
+            200,
+            json={
+                "signed_url": (
+                    "wss://api.us.elevenlabs.io/v1/convai/conversation?agent_id=agent_test"
+                    "&conversation_signature=synthetic-only&conversation_id=conv_reserved"
+                )
+            },
+        )
+
+    _transport(monkeypatch, handler)
+    with TestClient(create_app()) as client:
+        response = client.post(
+            URL,
+            json={
+                "user_id": "u-test",
+                "thread_id": "thread-test",
+                "language": "es",
+                "supports_vita_voice": True,
+            },
+            headers=HEADERS,
+        )
+    assert response.status_code == 200
+    assert response.json()["conversation_id"] == "conv_reserved"
+    assert response.json()["runtime_mode"] == "legacy"
+    assert response.json()["session_id"]
+    store.assert_awaited_once()
+    assert store.call_args.args[0].conversation_id == "conv_reserved"
+
+
+@pytest.mark.parametrize(
+    "body_id,query,expected",
+    [
+        (None, "conversation_id=conv_reserved", "conv_reserved"),
+        ("conv_reserved", "conversation_id=conv_reserved", "conv_reserved"),
+        ("conv_reserved", "", "conv_reserved"),
+        (None, "", None),
+    ],
+)
+async def test_signed_url_conversation_id_compatibility(monkeypatch, body_id, query, expected):
+    _transport(
+        monkeypatch,
+        lambda _: httpx.Response(
+            200,
+            json={"signed_url": f"wss://signed.example/token?{query}", "conversation_id": body_id},
+        ),
+    )
+    result = await voice_client.create_signed_url(get_settings(), "agent_test")
+    assert result["conversation_id"] == expected
+
+
+@pytest.mark.parametrize(
+    "body_id,query",
+    [
+        ("conv_other", "conversation_id=conv_reserved"),
+        (None, "conversation_id=conv_one&conversation_id=conv_two"),
+        (None, "conversation_id="),
+        (None, "conversation_id=conv_%0Ainvalid"),
+        (None, "conversation_id=" + "x" * 129),
+    ],
+)
+async def test_ambiguous_or_invalid_reserved_id_fails_closed(monkeypatch, body_id, query):
+    _transport(
+        monkeypatch,
+        lambda _: httpx.Response(
+            200,
+            json={"signed_url": f"wss://signed.example/token?{query}", "conversation_id": body_id},
+        ),
+    )
+    with pytest.raises(voice_client.VoiceSessionError) as caught:
+        await voice_client.create_signed_url(get_settings(), "agent_test")
+    assert caught.value.status == 502
+    assert "wss://" not in str(caught.value)
 
 
 @pytest.mark.parametrize("variable", ["VOICE_ENABLED", "ELEVENLABS_PATIENT_VERSION_ES"])
