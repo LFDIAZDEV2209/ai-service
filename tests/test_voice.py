@@ -254,7 +254,7 @@ async def test_concurrent_locales_pin_each_request_and_reverify_without_cache(mo
 @pytest.mark.parametrize(
     "failure", [None, "unapproved", "changed", "server", "wrong_name", "mock", "unavailable"]
 )
-def test_attached_tools_require_reviewed_client_definition_each_session(monkeypatch, failure):
+def test_legacy_appointment_tools_are_rejected_even_when_reviewed(monkeypatch, failure):
     tool_id = "tool_appointment"
     tool_config = {
         "type": "client",
@@ -300,7 +300,7 @@ def test_attached_tools_require_reviewed_client_definition_each_session(monkeypa
     _transport(monkeypatch, handler)
     for _ in range(2):
         response = _post()
-        assert response.status_code == (200 if failure is None else 503)
+        assert response.status_code == 503
     assert calls.count("/v1/convai/agents/agent_test") == 2
     assert calls.count("/v1/convai/tools/" + tool_id) == (0 if failure == "unapproved" else 2)
 

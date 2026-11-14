@@ -92,7 +92,17 @@ async def thread_state(
         text = extract_message_text(getattr(message, "content", "") or "")
         if not text.strip():
             continue
-        visible.append(ThreadMessageResponse(role=role, text=text))
+        metadata = getattr(message, "additional_kwargs", {})
+        visible.append(
+            ThreadMessageResponse(
+                role=role,
+                text=text,
+                message_id=message.id,
+                channel=metadata.get("channel", "text"),
+                status=metadata.get("status", "final"),
+                revision=metadata.get("revision", 1),
+            )
+        )
 
     last_message = None
     if messages:

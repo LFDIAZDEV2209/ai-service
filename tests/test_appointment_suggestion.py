@@ -73,8 +73,8 @@ async def test_graph_captures_appointment_suggestion():
         config=_config("t-suggestion"),
     )
 
-    assert result["tools_used"] == ["suggest_appointment"]
-    assert result["suggestions"] == [EXPECTED_SUGGESTION]
+    assert result["tools_used"] == []
+    assert result["suggestions"] == []
     assert result["messages"][-1].content == "Te recomiendo agendar una cita con tu médico."
 
 
@@ -112,7 +112,7 @@ def test_chat_returns_suggestions_array(suggestion_client):
     )
     assert res.status_code == 200
     body = res.json()
-    assert body["suggestions"] == [EXPECTED_SUGGESTION]
+    assert body["suggestions"] == []
 
 
 @pytest.fixture
@@ -160,7 +160,7 @@ def test_chat_stream_done_includes_suggestions(suggestion_client):
 
     assert done["thread_id"]
     assert done["execution_id"]
-    assert done["suggestions"] == [EXPECTED_SUGGESTION]
+    assert done["suggestions"] == []
 
 
 # --- (d) Tool: validación de urgency ----------------------------------------
@@ -205,7 +205,7 @@ def test_appointment_suggestion_does_not_leak_to_next_turn(streaming):
             headers=HEADERS,
         )
         first_body = _parse_sse_done(first.text) if streaming else first.json()
-        assert first_body["suggestions"] == [EXPECTED_SUGGESTION]
+        assert first_body["suggestions"] == []
         second = client.post(
             path, json={"message": "Cuánto es 19 por 7", "thread_id": "shared"}, headers=HEADERS
         )

@@ -75,6 +75,11 @@ async def _seed(graph, messages: list) -> None:
     await graph.aupdate_state(_config(), {"messages": messages})
 
 
+def _legacy_messages(body):
+    """Los campos aditivos no cambian el contrato histórico role/text."""
+    return [{"role": m["role"], "text": m["text"]} for m in body["messages"]]
+
+
 def _get(
     client,
     thread_id: str = THREAD_ID,
@@ -113,7 +118,7 @@ async def test_messages_maps_roles_and_preserves_order(client, graph):
     res = _get(client)
     assert res.status_code == 200
     body = res.json()
-    assert body["messages"] == [
+    assert _legacy_messages(body) == [
         {"role": "user", "text": "Hola"},
         {"role": "bot", "text": "¿En qué te ayudo?"},
         {"role": "user", "text": "Me duele la cabeza"},
@@ -146,7 +151,7 @@ async def test_tool_and_system_messages_excluded(client, graph):
     )
 
     body = _get(client).json()
-    assert body["messages"] == [
+    assert _legacy_messages(body) == [
         {"role": "user", "text": "¿Cuánto es 2+2?"},
         {"role": "bot", "text": "Son 4"},
     ]
@@ -182,7 +187,7 @@ async def test_tool_call_only_ai_messages_excluded(client, graph):
     )
 
     body = _get(client).json()
-    assert body["messages"] == [
+    assert _legacy_messages(body) == [
         {"role": "user", "text": "Busca mi cita"},
         {"role": "bot", "text": "Listo."},
     ]
@@ -198,8 +203,8 @@ async def test_limit_100_returns_last_100_and_reports_full_count(client, graph):
     assert body["message_count"] == total
     assert len(body["messages"]) == 100
     # Se conservan los ÚLTIMOS 100, no los primeros.
-    assert body["messages"][0] == {"role": "user", "text": "m020"}
-    assert body["messages"][-1] == {"role": "user", "text": "m119"}
+    assert _legacy_messages(body)[0] == {"role": "user", "text": "m020"}
+    assert _legacy_messages(body)[-1] == {"role": "user", "text": "m119"}
     # Quedan 20 visibles más antiguos: se indica la página anterior.
     assert body["has_more"] is True
     assert body["next_cursor"] == 100
@@ -276,3 +281,31 @@ async def test_thread_with_only_hidden_messages_returns_empty_list(client, graph
 def test_missing_thread_returns_404_not_500(client):
     res = _get(client, thread_id="no-existe")
     assert res.status_code == 404
+
+
+async def test_voice_ids_are_canonical_generated_ids_not_proof_of_heard_audio(client, graph):
+    await _seed(
+        graph,
+        [
+            HumanMessage(
+                content="Texto ASR",
+                id="voice:session:1:user",
+                additional_kwargs={
+                    "channel": "voice",
+                    "status": "provider_input",
+                },
+            ),
+            AIMessage(
+                content="Texto generado",
+                id="voice:session:1:bot",
+                additional_kwargs={
+                    "channel": "voice",
+                    "status": "generated",
+                },
+            ),
+        ],
+    )
+    messages = _get(client).json()["messages"]
+    assert [m["message_id"] for m in messages] == ["voice:session:1:user", "voice:session:1:bot"]
+    assert [m["status"] for m in messages] == ["provider_input", "generated"]
+    assert all(m["channel"] == "voice" for m in messages)

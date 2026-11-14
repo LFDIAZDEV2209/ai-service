@@ -29,7 +29,7 @@ class MemoryConfig(BaseModel):
 class AgentRuntimeConfig(BaseModel):
     """Configuración ejecutable de un tipo de agente.
 
-    - `tools`: subconjunto de tools por nombre; vacío → todas disponibles.
+    - `tools`: subconjunto explícito; vacío hereda solo el conjunto legado congelado.
     - `provider`/`model`/`temperature`/`max_tokens`: overrides del LLM; si se
       omiten se usa la configuración global del servicio.
     """
@@ -43,8 +43,9 @@ class AgentRuntimeConfig(BaseModel):
     tools: list[str] = Field(default_factory=list)
     retrieval_config: RetrievalConfig = Field(default_factory=RetrievalConfig)
     memory_config: MemoryConfig = Field(default_factory=MemoryConfig)
-    max_tool_calls: int = 8
-    recursion_limit: int = 25
+    max_tool_calls: int = Field(default=8, ge=0, le=16)
+    tool_timeout_seconds: float = Field(default=3, gt=0, le=8)
+    recursion_limit: int = Field(default=25, ge=3, le=50)
 
     def effective_system_prompt(self) -> str:
         """Devuelve el prompt de sistema a usar (el perfil gana si no hay propio)."""

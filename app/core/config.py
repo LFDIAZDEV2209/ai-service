@@ -81,6 +81,16 @@ class Settings(BaseSettings):
     internal_api_key: str = ""
     # URL del backend para consultas internas del contexto del paciente.
     backend_base_url: str = ""
+    vita_runtime_enabled: bool = False
+    vita_http_timeout: float = Field(default=3, gt=0, le=8)
+    vita_turn_timeout: float = Field(default=20, gt=0, le=90)
+    vita_voice_enabled: bool = False
+    vita_voice_transport_verified: bool = False
+    vita_elevenlabs_agent_id: str | None = None
+    vita_elevenlabs_version_id: str | None = None
+    vita_voice_service_key: str = ""
+    vita_voice_context_secret: str = ""
+    vita_voice_session_ttl: int = Field(default=600, ge=30, le=600)
 
     # CORS — allowlist explícita de orígenes (separados por coma en CORS_ORIGINS).
     # No hay clientes de navegador del AI Service hoy: el backend .NET lo consume

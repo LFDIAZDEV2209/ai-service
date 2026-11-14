@@ -27,7 +27,7 @@ from app.db.models import AgentRuntimeConfig as AgentRuntimeConfigRow
 from app.graph.graph import build_graph
 from app.llm.factory import get_chat_model
 from app.memory.checkpointer import get_checkpointer
-from app.tools.registry import TOOLS_BY_NAME
+from app.tools.registry import TOOLS_BY_NAME, legacy_tools, patient_tools
 from app.tools.retrieval import make_retrieve_tool
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,7 @@ class CompiledAgent:
     graph: Any
     runtime_config: AgentRuntimeConfig
     configured_knowledge_base_ids: tuple[str, ...] = ()
+    source_config: dict | None = None
 
 
 class AgentRuntimeRegistry:
@@ -94,8 +95,26 @@ class AgentRuntimeRegistry:
             AgentRuntimeError: si el agente no está sincronizado (el backend
                 aún no lo notificó) o su configuración es inválida.
         """
+        # Revalidar activación/versión incluso con grafo cacheado. Una notificación
+        # perdida no puede conservar un agente revocado indefinidamente.
+        row = (
+            await session.execute(
+                select(AgentRuntimeConfigRow).where(
+                    AgentRuntimeConfigRow.agent_type_id == agent_type_id,
+                    AgentRuntimeConfigRow.is_active.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            self.invalidate(agent_type_id)
+            raise AgentRuntimeError(f"Agente {agent_type_id} no sincronizado en el runtime")
         with self._lock:
             cached = self._cache.get(agent_type_id)
+        if cached is not None and (
+            cached.version_id != (row.version_id or "")
+            or cached.source_config != AgentRuntimeConfig.model_validate(row.config).model_dump()
+        ):
+            cached = None
         if cached is not None:
             retrieval = cached.runtime_config.retrieval_config
             if retrieval.enabled:
@@ -107,28 +126,34 @@ class AgentRuntimeRegistry:
                     config.retrieval_config.knowledge_base_ids = ids
                     compiled = await self._compile(agent_type_id, cached.version_id, config)
                     compiled = replace(
-                        compiled, configured_knowledge_base_ids=cached.configured_knowledge_base_ids
+                        compiled,
+                        configured_knowledge_base_ids=cached.configured_knowledge_base_ids,
+                        source_config=cached.source_config,
                     )
                     with self._lock:
                         self._cache[agent_type_id] = compiled
                     return compiled
             return cached
 
-        return await self._load_and_compile(agent_type_id, session)
+        return await self._load_and_compile(agent_type_id, session, row=row)
 
     async def _load_and_compile(
         self,
         agent_type_id: str,
         session: AsyncSession,
+        row: AgentRuntimeConfigRow | None = None,
     ) -> CompiledAgent:
         row = (
-            await session.execute(
-                select(AgentRuntimeConfigRow).where(
-                    AgentRuntimeConfigRow.agent_type_id == agent_type_id,
-                    AgentRuntimeConfigRow.is_active.is_(True),
+            row
+            or (
+                await session.execute(
+                    select(AgentRuntimeConfigRow).where(
+                        AgentRuntimeConfigRow.agent_type_id == agent_type_id,
+                        AgentRuntimeConfigRow.is_active.is_(True),
+                    )
                 )
-            )
-        ).scalar_one_or_none()
+            ).scalar_one_or_none()
+        )
 
         if row is None:
             raise AgentRuntimeError(
@@ -137,13 +162,16 @@ class AgentRuntimeRegistry:
             )
 
         runtime_config = AgentRuntimeConfig.model_validate(row.config)
+        source_config = runtime_config.model_dump()
         configured_ids = tuple(runtime_config.retrieval_config.knowledge_base_ids)
         if runtime_config.retrieval_config.enabled:
             runtime_config.retrieval_config.knowledge_base_ids = await resolve_knowledge_base_ids(
                 session, agent_type_id, configured_ids
             )
         compiled = await self._compile(agent_type_id, row.version_id or "", runtime_config)
-        compiled = replace(compiled, configured_knowledge_base_ids=configured_ids)
+        compiled = replace(
+            compiled, configured_knowledge_base_ids=configured_ids, source_config=source_config
+        )
 
         with self._lock:
             if len(self._cache) >= _MAX_CACHED_GRAPHS:
@@ -165,6 +193,7 @@ class AgentRuntimeRegistry:
         agent_type_id: str,
         version_id: str,
         runtime_config: AgentRuntimeConfig,
+        prepare_tools: list[str] | None = None,
     ) -> CompiledAgent:
         """Construye el grafo con los overrides del agente (provider/model/tools)."""
         try:
@@ -201,6 +230,9 @@ class AgentRuntimeRegistry:
             model=model,
             system_prompt=runtime_config.effective_system_prompt(),
             tools=tools,
+            max_tool_calls=runtime_config.max_tool_calls,
+            tool_timeout_seconds=runtime_config.tool_timeout_seconds,
+            prepare_tools=prepare_tools,
             enable_memory=runtime_config.memory_config.enabled,
             checkpointer=(
                 await get_checkpointer()
@@ -217,9 +249,9 @@ class AgentRuntimeRegistry:
         )
 
     def _select_tools(self, names: list[str], agent_type_id: str) -> list[Any]:
-        """Subconjunto de tools por nombre; vacío → todas. Valida nombres."""
+        """Vacío hereda solo capacidades legadas; valida nombres explícitos."""
         if not names:
-            return list(TOOLS_BY_NAME.values())
+            return legacy_tools(include_patient=True)
 
         selected = []
         for name in names:
@@ -230,7 +262,36 @@ class AgentRuntimeRegistry:
                     f"Disponibles: {sorted(TOOLS_BY_NAME)}"
                 )
             selected.append(tool)
-        return selected
+        return patient_tools(selected)
+
+    async def with_vita_reads(
+        self,
+        compiled: CompiledAgent,
+        *,
+        channel: str = "text",
+        scope: str | None = None,
+    ) -> CompiledAgent:
+        """Overlay explícito SOLO tras autorización Vita; no cambia la config ERP.
+
+        La política de código concede las seis lecturas al paciente autenticado.
+        Metadata de routing no puede añadir herramientas, escrituras ni KBs.
+        """
+        from app.tools.vita import VITA_READ_TOOL_NAMES
+
+        config = compiled.runtime_config.model_copy(deep=True)
+        names = {t.name for t in self._select_tools(config.tools, compiled.agent_type_id)}
+        config.tools = sorted((names - {"get_patient_data"}) | VITA_READ_TOOL_NAMES)
+        prepare = None
+        if channel == "voice":
+            prepare = [f"get_my_{scope}"] if scope else []
+            if config.retrieval_config.enabled and config.retrieval_config.knowledge_base_ids:
+                prepare.append("retrieve_knowledge")
+        return await self._compile(
+            compiled.agent_type_id,
+            compiled.version_id,
+            config,
+            prepare_tools=prepare,
+        )
 
 
 # Singleton del proceso: los endpoints internos invalidan y los de chat leen.

@@ -1,0 +1,1259 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "coppaddresd-ai-service",
+    "description": "Agente IA de CoppAddresd — LangGraph + FastAPI (multi-proveedor).",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/chat": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Chat",
+        "description": "Ejecuta el agente de principio a fin y devuelve la respuesta completa.",
+        "operationId": "chat_api_v1_chat_post",
+        "parameters": [
+          {
+            "name": "x-internal-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat/feedback": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Feedback",
+        "description": "Registra el feedback del usuario y alimenta la adaptive memory.\n\nSi vienen `agent_type_id` + `trigger` + `response`, el rating se convierte\nen una experiencia aprendida (patrón trigger → response con outcome\nsuccess/error según el rating). El feedback siempre se persiste.",
+        "operationId": "feedback_api_v1_chat_feedback_post",
+        "parameters": [
+          {
+            "name": "x-internal-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat/stream": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Chat Stream",
+        "description": "Streaming del agente vía Server-Sent Events (tokens + nodos en vivo).",
+        "operationId": "chat_stream_api_v1_chat_stream_post",
+        "parameters": [
+          {
+            "name": "x-internal-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/threads/{thread_id}/state": {
+      "get": {
+        "tags": [
+          "threads"
+        ],
+        "summary": "Thread State",
+        "description": "Devuelve una página del historial persistido de un thread (solo del\nusuario autenticado que lo consulta), incluidos los mensajes visibles que\nla app del paciente necesita para reconstruir la conversación.\n\n`limit` define el tamaño de la página y `before` el cursor que saltea\nmensajes visibles desde el más nuevo (null ⇒ página más reciente). La\nrespuesta incluye `has_more` y `next_cursor` para pedir la página anterior.",
+        "operationId": "thread_state_api_v1_threads__thread_id__state_get",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "ID del usuario propietario (backend/JWT)",
+              "title": "User Id"
+            },
+            "description": "ID del usuario propietario (backend/JWT)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Cantidad máxima de mensajes visibles por página.",
+              "default": 10,
+              "title": "Limit"
+            },
+            "description": "Cantidad máxima de mensajes visibles por página."
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Cursor de paginación: cuántos mensajes visibles saltear desde el más nuevo (null/ausente ⇒ página más reciente).",
+              "title": "Before"
+            },
+            "description": "Cursor de paginación: cuántos mensajes visibles saltear desde el más nuevo (null/ausente ⇒ página más reciente)."
+          },
+          {
+            "name": "x-internal-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadStateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/voice/session": {
+      "post": {
+        "tags": [
+          "internal"
+        ],
+        "summary": "Create Voice Session",
+        "description": "Emite una sesión temporal de voz para un paciente autenticado.\n\nEl backend valida identidad/estado/rate limit/auditoría ANTES de llamar\naquí; este endpoint solo materializa la sesión contra ElevenLabs.",
+        "operationId": "create_voice_session_internal_voice_session_post",
+        "parameters": [
+          {
+            "name": "x-internal-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceSessionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/voice/session/{session_id}": {
+      "delete": {
+        "tags": [
+          "internal"
+        ],
+        "summary": "Revoke Voice Session",
+        "operationId": "revoke_voice_session_internal_voice_session__session_id__delete",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "x-internal-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/voice/v1/chat/completions": {
+      "post": {
+        "tags": [
+          "voice-runtime"
+        ],
+        "summary": "Completion",
+        "operationId": "completion_internal_voice_v1_chat_completions_post",
+        "parameters": [
+          {
+            "name": "x-vita-session",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "X-Vita-Session"
+            }
+          },
+          {
+            "name": "x-vita-conversation",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "X-Vita-Conversation"
+            }
+          },
+          {
+            "name": "x-vita-turn",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 10000,
+              "minimum": 1,
+              "title": "X-Vita-Turn"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompletionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChatRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Message",
+            "description": "Mensaje del usuario"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id",
+            "description": "ID de conversación. Si se omite, se crea una nueva."
+          },
+          "agent": {
+            "type": "string",
+            "title": "Agent",
+            "description": "Clave del perfil de agente",
+            "default": "base"
+          },
+          "agent_type_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Type Id",
+            "description": "ID del tipo de agente (backend). Si se omite, se usa el perfil `agent`."
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id",
+            "description": "ID del usuario (auth.users) para aislar memoria/estado."
+          },
+          "patient_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Id",
+            "description": "ID del paciente asociado (aisla contexto clínico)."
+          },
+          "agent_instance_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Instance Id",
+            "description": "ID de la instancia de agente asignada al paciente."
+          },
+          "control_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ControlContext"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Contexto del control de programa activo (backend). Ausente o null ⇒ comportamiento byte-idéntico al chat estándar (sin guía ni señal)."
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language",
+            "description": "Idioma de la app del paciente ('es' | 'en'), enviado por el frontend en cada turno. Ausente o null ⇒ el agente mantiene el espejo del idioma del usuario (comportamiento byte-idéntico al estándar)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest"
+      },
+      "ChatResponse": {
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "title": "Thread Id"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "actions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Actions"
+          },
+          "sources": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          },
+          "agent": {
+            "type": "string",
+            "title": "Agent",
+            "default": "base"
+          },
+          "tools_used": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tools Used"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "execution_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Id",
+            "description": "ID de la ejecución registrada (observabilidad); úsalo para enviar feedback."
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/ChatSuggestion"
+            },
+            "type": "array",
+            "title": "Suggestions",
+            "description": "Sugerencias de acción estructuradas (p. ej. CTA de cita)."
+          },
+          "control_signal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Signal",
+            "description": "Señal estructurada del control de programa (p. ej. 'declined'). Solo se emite cuando el paciente rechazó explícitamente subir su examen; ausente/null en cualquier otro caso."
+          }
+        },
+        "type": "object",
+        "required": [
+          "thread_id",
+          "answer"
+        ],
+        "title": "ChatResponse"
+      },
+      "ChatSuggestion": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "default": "appointment"
+          },
+          "cta_text": {
+            "type": "string",
+            "title": "Cta Text",
+            "default": "Agenda tu cita aquí"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "urgency": {
+            "type": "string",
+            "title": "Urgency",
+            "default": "normal"
+          }
+        },
+        "type": "object",
+        "title": "ChatSuggestion",
+        "description": "Sugerencia de acción estructurada para la capa de presentación.\n\nv1: solo CTA de agenda de cita (\"Agenda tu cita aquí\") que la app móvil\ndel paciente puede renderizar como botón. El `reason` y la `urgency` los\ndecide el agente al llamar la tool `suggest_appointment`."
+      },
+      "CompletionRequest": {
+        "properties": {
+          "stream": {
+            "type": "boolean",
+            "const": true,
+            "title": "Stream"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderMessage"
+            },
+            "type": "array",
+            "maxItems": 128,
+            "minItems": 1,
+            "title": "Messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stream",
+          "messages"
+        ],
+        "title": "CompletionRequest"
+      },
+      "ControlContext": {
+        "properties": {
+          "send_id": {
+            "type": "string",
+            "title": "Send Id",
+            "description": "UUID del envío del control (app.program_controls.id)."
+          },
+          "milestone_day": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Milestone Day",
+            "description": "Día del hito del programa al que pertenece el control."
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Estado del control: sent | responded | followed_up."
+          },
+          "exam_pending": {
+            "type": "boolean",
+            "title": "Exam Pending",
+            "description": "True si el examen de laboratorio sigue pendiente de subir."
+          }
+        },
+        "type": "object",
+        "required": [
+          "send_id",
+          "milestone_day",
+          "status",
+          "exam_pending"
+        ],
+        "title": "ControlContext",
+        "description": "Contexto del control de programa activo enviado por el backend .NET.\n\nSolo está presente cuando el turno corresponde a un control de programa\nabierto (recordatorio de subir el examen de laboratorio del día del hito).\nLos cuatro campos son obligatorios; un contexto malformado se rechaza con\n422 (nunca 500)."
+      },
+      "FeedbackRequest": {
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Thread Id",
+            "description": "Conversación evaluada"
+          },
+          "rating": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Rating",
+            "description": "Puntuación 1-5"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "execution_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Id",
+            "description": "ID de la ejecución (devuelto por /chat) para vincular el feedback."
+          },
+          "agent_type_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Type Id",
+            "description": "Tipo de agente (backend). Si se omite, solo se persiste el feedback."
+          },
+          "trigger": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger",
+            "description": "Mensaje del usuario que disparó la respuesta evaluada."
+          },
+          "response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response",
+            "description": "Respuesta del agente evaluada."
+          }
+        },
+        "type": "object",
+        "required": [
+          "thread_id",
+          "rating"
+        ],
+        "title": "FeedbackRequest",
+        "description": "Feedback del usuario sobre una respuesta del agente.\n\n`agent_type_id` + `trigger` + `response` permiten crear/refinar una\nexperiencia aprendida (adaptive memory) sin depender del checkpointer."
+      },
+      "FeedbackResponse": {
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "title": "Thread Id"
+          },
+          "rating": {
+            "type": "integer",
+            "title": "Rating"
+          },
+          "experience_saved": {
+            "type": "boolean",
+            "title": "Experience Saved"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          }
+        },
+        "type": "object",
+        "required": [
+          "thread_id",
+          "rating",
+          "experience_saved"
+        ],
+        "title": "FeedbackResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ProviderMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "system",
+              "developer",
+              "user",
+              "assistant",
+              "tool"
+            ],
+            "title": "Role"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 8000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "ProviderMessage"
+      },
+      "ThreadMessageResponse": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "Rol del emisor: 'user' (paciente) o 'bot' (agente)."
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Texto plano del mensaje (sin bloques internos de tool_use)."
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "channel": {
+            "type": "string",
+            "title": "Channel",
+            "default": "text"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "final"
+          },
+          "revision": {
+            "type": "integer",
+            "title": "Revision",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "text"
+        ],
+        "title": "ThreadMessageResponse",
+        "description": "Mensaje individual del historial visible de una conversación."
+      },
+      "ThreadStateResponse": {
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "title": "Thread Id"
+          },
+          "message_count": {
+            "type": "integer",
+            "title": "Message Count"
+          },
+          "last_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Message"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadMessageResponse"
+            },
+            "type": "array",
+            "title": "Messages",
+            "description": "Página solicitada del historial visible, en orden cronológico (más reciente al final; máximo `limit` mensajes, tope 100)."
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More",
+            "description": "True cuando existe historial visible más antiguo que esta página.",
+            "default": false
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor",
+            "description": "Valor a enviar como `before` para pedir la página anterior; null cuando `has_more` es false."
+          }
+        },
+        "type": "object",
+        "required": [
+          "thread_id",
+          "message_count"
+        ],
+        "title": "ThreadStateResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VoiceSessionRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "User Id"
+          },
+          "patient_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Id"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "VoiceSessionRequest",
+        "description": "Solicitud de sesión de voz emitida por el backend .NET."
+      },
+      "VoiceSessionResponse": {
+        "properties": {
+          "signed_url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Signed Url"
+          },
+          "agent_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "session_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Token"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "runtime_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "legacy",
+                  "vita"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "signed_url",
+          "agent_id"
+        ],
+        "title": "VoiceSessionResponse",
+        "description": "Sesión temporal de voz lista para conectar desde la app."
+      }
+    }
+  }
+}

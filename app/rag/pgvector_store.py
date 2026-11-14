@@ -92,15 +92,19 @@ class PgVectorStore:
         Returns:
             Lista de (Chunk, score) ordenada por relevancia descendente.
         """
+        if not knowledge_base_ids:
+            return []
         # El catálogo ERP es la autoridad: chunks residuales de documentos archivados,
         # borrados o KBs inactivas nunca participan en una respuesta clínica.
-        stmt = select(KnowledgeChunk).where(text(
-            "EXISTS (SELECT 1 FROM agents.documents d "
-            "JOIN agents.knowledge_bases kb ON kb.id = d.knowledge_base_id "
-            "WHERE d.id::text = ai.knowledge_chunks.document_id "
-            "AND kb.id::text = ai.knowledge_chunks.knowledge_base_id "
-            "AND d.status = 'Listo' AND kb.status = 'Activo')"
-        ))
+        stmt = select(KnowledgeChunk).where(
+            text(
+                "EXISTS (SELECT 1 FROM agents.documents d "
+                "JOIN agents.knowledge_bases kb ON kb.id = d.knowledge_base_id "
+                "WHERE d.id::text = ai.knowledge_chunks.document_id "
+                "AND kb.id::text = ai.knowledge_chunks.knowledge_base_id "
+                "AND d.status = 'Listo' AND kb.status = 'Activo')"
+            )
+        )
         if knowledge_base_ids:
             stmt = stmt.where(KnowledgeChunk.knowledge_base_id.in_(knowledge_base_ids))
         if document_id:

@@ -99,8 +99,9 @@ def _message_text(content) -> str:
 class ExecutionTracker:
     """Registra una ejecución del grafo en `ai.agent_executions` (best-effort)."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, *, redact_content: bool = False):
         self._session = session
+        self._redact_content = redact_content
 
     async def start(
         self,
@@ -127,9 +128,9 @@ class ExecutionTracker:
             user_id=user_id,
             status=_STATUS_RUNNING,
             input={
-                "message": message,
-                "memory_context": memory_context or None,
-                "experience_context": experience_context or None,
+                "message": None if self._redact_content else message,
+                "memory_context": None if self._redact_content else memory_context or None,
+                "experience_context": None if self._redact_content else experience_context or None,
                 "provider": provider,
                 "model": model,
             },
@@ -169,7 +170,7 @@ class ExecutionTracker:
             return
         execution.status = _STATUS_OK
         output: dict = {
-            "answer": answer or None,
+            "answer": None if self._redact_content else answer or None,
             "tools_used": result_state.get("tools_used", []),
             "rag_sources": extract_rag_sources(messages),
             "suggestions": result_state.get("suggestions", []),
@@ -196,7 +197,7 @@ class ExecutionTracker:
         if execution is None:
             return
         execution.status = _STATUS_ERROR
-        execution.error = error[:2000]
+        execution.error = "vita_execution_failed" if self._redact_content else error[:2000]
         execution.latency_ms = latency_ms
         execution.ended_at = datetime.now(UTC)
 
