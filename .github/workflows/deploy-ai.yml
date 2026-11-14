@@ -145,7 +145,7 @@ jobs:
               {"name": "VITA_RUNTIME_ENABLED", "value": "true"},
               {"name": "VITA_TRANSCRIPT_SYNC_ENABLED", "value": "true"},
               {"name": "VITA_ELEVENLABS_AGENT_ID", "value": "agent_5501m7dgvbpff26b1nk5s73qx4kf"},
-              {"name": "VITA_ELEVENLABS_VERSION_ID", "value": "agtvrsn_8001m7dgvcp9fmftcphr1cky9pwe"},
+              {"name": "VITA_ELEVENLABS_VERSION_ID", "value": "agtvrsn_4801m7dj6kxsexbs7wwynbnnbpzt"},
               {"name": "VITA_VOICE_ENABLED", "value": "false"}
             ]) |
               .containerDefinitions[0].secrets = ([
