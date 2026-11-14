@@ -25,6 +25,7 @@ class ControlContext(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=8000, description="Mensaje del usuario")
+    supports_vita: bool = False
     thread_id: str | None = Field(
         default=None,
         description="ID de conversación. Si se omite, se crea una nueva.",
@@ -135,10 +136,16 @@ class ThreadMessageResponse(BaseModel):
     channel: str = "text"
     status: str = "final"
     revision: int = 1
+    execution_id: str | None = None
+    source: str | None = None
+    voice_session_id: str | None = None
+    provider_message_id: str | None = None
+    source_event_id: int | None = None
 
 
 class ThreadStateResponse(BaseModel):
     thread_id: str
+    voice_sync_status: str | None = None
     message_count: int
     last_message: str | None = None
     messages: list[ThreadMessageResponse] = Field(

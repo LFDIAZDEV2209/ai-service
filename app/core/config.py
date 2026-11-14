@@ -85,6 +85,8 @@ class Settings(BaseSettings):
     vita_http_timeout: float = Field(default=3, gt=0, le=8)
     vita_turn_timeout: float = Field(default=20, gt=0, le=90)
     vita_voice_enabled: bool = False
+    vita_transcript_sync_enabled: bool = False
+    vita_transcript_sync_timeout: float = Field(default=5, gt=0, le=10)
     vita_voice_transport_verified: bool = False
     vita_elevenlabs_agent_id: str | None = None
     vita_elevenlabs_version_id: str | None = None

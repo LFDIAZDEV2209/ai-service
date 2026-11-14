@@ -47,6 +47,7 @@ async def classify(text: str, candidates: list[AuthorizedAgent]) -> str | None:
                                     {
                                         "id": a.id,
                                         "specialty": a.specialty,
+                                        "description": a.description,
                                         "topics": a.routing.topics,
                                     }
                                     for a in candidates

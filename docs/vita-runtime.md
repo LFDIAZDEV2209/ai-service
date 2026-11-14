@@ -12,6 +12,13 @@ también exige `VOICE_ENABLED` y `VITA_VOICE_TRANSPORT_VERIFIED`, una versión y
 Custom LLM dedicados y secretos configurados. El modo remoto anterior permanece como
 camino legado. No se modifica `docs/elevenlabs/agent-config.md` del carril raíz.
 
+Texto exige además `ChatRequest.supports_vita=true` (BACK: `supportsVita`). Ausente o
+false conserva el flujo previo y la configuración explícita ERP, incluso con flag
+global activo; WhatsApp sigue legado. La capacidad no sustituye perfil, consentimiento
+ni catálogo autorizado. Voz negocia por separado `supports_vita_voice=false` por defecto:
+clientes antiguos conservan respuesta legada exacta. Cliente true en modo legacy
+reserva vínculo durable y recibe session_id/thread_id/runtime_mode, sin session_token.
+
 La identidad/política educativa de Vita se inyecta desde código en general,
 especialistas, rondas de herramientas y voz. ERP, memoria, documentos e historial
 son referencias de menor autoridad. Se mantienen controles de programa, idioma por
@@ -68,10 +75,12 @@ GET `/api/v1/internal/vita/agents?userId=` se consulta por turno. Se consume el 
 BACK `id/runtimeKey/slug/name/description/specialty/versionId/versionNumber/routing`.
 `routing` solo contiene `topics/keywords/channels`. Selección explícita por GUID/slug,
 reglas del catálogo y continuidad breve. Canal vacío excluye el agente. Un agente
-nuevo no requiere otro slug en código. El clasificador estructurado se usa solo
-ante empate temático entre candidatos autorizados; fallos del proveedor degradan a
-general/aclaración. Saludos compuestos, identidad, agradecimientos, ayuda de app y
-entradas largas sin evidencia temática no llaman a otro LLM.
+nuevo no requiere otro slug en código. El clasificador estructurado se usa ante
+empate o consulta temática personal sin coincidencia literal; incluye descripción de
+candidatos y valida el ID autorizado. Timeout/fallos degradan a general/aclaración.
+Saludos compuestos ES/EN, identidad, agradecimientos, ayuda de app y cálculo simple
+evitan el clasificador. La consulta «Últimamente me siento desbordado y me cuesta
+dormir» permite elegir psicología sin añadir keywords o slugs fijos.
 
 Se ejecuta la configuración/modelo/proveedor reales de la versión seleccionada.
 Discrepancia catálogo/runtime falla cerrada. La caché revalida fila activa, versión,
@@ -158,6 +167,11 @@ emite texto progresivo con una sola generación. El adaptador solo transmite ese
 filtra bloques thinking/internos y produce SSE Chat Completions + `[DONE]`. Se probó
 por ASGI que el primer contenido sale mientras la generación todavía está detenida.
 El tiempo `first_token_ms` comienza al entrar al endpoint e incluye su resolución.
+El nodo real también recibe una política de entrega de voz compartida con el builder:
+turnos breves/naturales, una pregunta útil, fuentes habladas breves, unidades legibles,
+sin markdown, UUIDs, URLs crudas, nombres de tools, repetir saludo o suplantar humano.
+Se aplica igualmente al especialista ERP; chat conserva su formato y no se impone
+otro max_tokens a modelos thinking. No añade generación.
 
 `ai.vita_voice_turns` guarda recibos/huellas/estado, no otra copia del transcript.
 Bloqueo `SELECT FOR UPDATE` de sesión y unicidad `(session_id, ordinal)`/contador;
@@ -196,16 +210,48 @@ El historial añade `message_id/channel/status/revision`. Voz usa `provider_inpu
 para entrada recibida y `generated` para respuesta generada: **no son prueba de audio
 heard/final ni de correspondencia con event_id/response_id del SDK**. APP no debe
 fusionar esos IDs por inferencia ni volver a enviar la transcripción como otra pregunta.
-Correcciones y texto realmente escuchado requieren correlación/interrupción verificadas.
-No se cierra aceptación 4.2/4.4/4.5 ni QA integral por haber probado el transporte.
-Modo Vita permanece apagado hasta aplicar migración en el destino, integrar BACK/APP
-y verificar correlación/interrupción/audio.
+El historial final usa el transcript autenticado del proveedor, descrito abajo;
+no necesita igualdad de chunk.id/response_id. La integración móvil, seguridad clínica
+y latencia de dispositivo siguen pendientes. Custom LLM permanece apagado.
+
+## Historial final de voz y feedback
+
+`VITA_TRANSCRIPT_SYNC_ENABLED=false`, timeout total 5 s (máximo configurable 10 s).
+BACK solicita `GET /api/v1/threads/{thread_id}/state?user_id=<JWT>&sync_voice=true`
+solo con cliente compatible y consentimiento vigente chat + voz. Es una autorización
+interna, no un parámetro del modelo; AI revalida catálogo/paciente/chat y propiedad.
+Sin ese opt-in no consulta al proveedor. Solo sesiones cerradas/revocadas o expiradas,
+máximo tres por GET, sin worker. Processing, proveedor caído o lock ocupado son
+reintentables mediante voice_sync_status; no se guardan parciales ni se borra chat.
+
+El vínculo durable guarda user/thread/conversation/agent/version/runtime_mode. El GET
+oficial del proveedor debe devolver conversation_id y agent_id esperados y status done.
+Solo role user/agent con message visible; se ignoran reasoning, tools, identidad del
+body y original_message completo. IDs incluyen conversación + rol + transcript.id,
+o source_event_id + ocurrencia, o índice absoluto si API antigua. Nunca igualdad de
+texto ni equivalencia del source_event_id con un ordinal runtime.
+
+Bajo el mismo lock del hilo se reemplaza únicamente el grupo de sesión, conservando
+otros mensajes. Replay no duplica; corrección incrementa revision. No genera respuestas,
+tools o memoria. Metadata: source=elevenlabs_transcript, voice_session_id,
+provider_message_id nullable, source_event_id y status provider_final|interrupted.
+Estos estados no afirman audio oído. El POC real de root documenta IDs null, eventos
+2 y 14 no contiguos y PCM16k interrumpido: message106 frente a original_message135,
+interrupted=true. La importación conserva message y flag. No acredita teléfono.
+
+Chat sync y stream propagan el ID del ExecutionTracker existente al mensaje final
+mediante configurable, incluyendo rechazo de guardrail. GET proyecta execution_id
+nullable (BACK/APP executionId), sin consultas por fila ni inferencia por texto/orden.
+Voz importada deja null. Reload preserva el ID real para feedback.
+
+La revisión fe62a09c1741 aún no desplegada incluye ahora vínculo/sincronización e
+índice owner/thread/created; usar la exportación de este lote al integrar.
 
 ## Cierre de validación local (14-11-2026)
 
 - `uv sync --locked`: dependencias del lock instaladas, sin actualizar `uv.lock`.
 - `uv run ruff check .`: correcto.
-- `uv run pytest -q`: **633 passed, 2 skipped**, 28.12 s. Los skips corresponden a
+- `uv run pytest -q`: **675 passed, 2 skipped**, 40.31 s. Los skips corresponden a
   los dos tests PostgreSQL opt-in, ejecutados aparte con éxito. 32 warnings existentes: deprecación Starlette/
   httpx y `FakeDbSession.add` asíncrono del doble legado; no fallos de producto.
 - `uv run pytest tests/test_vita_voice.py -k first_final_token -q`: 1 passed;
@@ -231,12 +277,13 @@ del proceso. Hook de tests `pytest_asyncio_loop_factories`: Selector solo para
 `test_vita_postgres.py` en Windows; los demás conservan `asyncio.new_event_loop`.
 No se modificó runtime ni configuración Linux ni se relajaron aserciones.
 
-Ejecución real tras el arreglo: **2 passed, 3 warnings, 1.60 s**. Acredita competencia
+Última ejecución real con vínculo/sync y migración revisada: **2 passed, 3 warnings,
+1.59 s**. Acredita competencia
 entre dos repositorios/conexiones, un recibo para el mismo turno, replay sin nueva
 generación, siguiente ordinal, rechazo de propietario ajeno, revocación compartida,
 advisory lock/liberación y migración `fe62a09c1741` + rollback reales en DB descartable.
 Tres warnings de Alembic por `path_separator` legado. El wrapper confirmó limpieza.
-Log local protegido: `%TEMP%/vita-ai-postgres-c3f9a72ef59e4cbcaafdd08731253ecf.log`.
+Log local protegido: `%TEMP%/vita-ai-postgres-efac7691d3c24df2b698d5e8b39b7700.log`.
 No acredita despliegue en varias réplicas de producción ni audio móvil.
 
 En la revisión final se corrigió además la consulta de embeddings de

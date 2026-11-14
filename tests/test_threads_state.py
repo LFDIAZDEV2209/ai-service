@@ -309,3 +309,45 @@ async def test_voice_ids_are_canonical_generated_ids_not_proof_of_heard_audio(cl
     assert [m["message_id"] for m in messages] == ["voice:session:1:user", "voice:session:1:bot"]
     assert [m["status"] for m in messages] == ["provider_input", "generated"]
     assert all(m["channel"] == "voice" for m in messages)
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("message", ["Texto para conservar feedback", " "])
+def test_reload_preserves_execution_tracker_id_without_per_message_database_lookup(
+    client, streaming, message
+):
+    import json
+    import uuid
+    from unittest.mock import AsyncMock, MagicMock
+
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.get.return_value = None
+    feedback_graph = build_graph(
+        model=FakeToolAwareModel(responses=[AIMessage(content="Respuesta con feedback")]),
+        checkpointer=MemorySaver(),
+    )
+    client.app.dependency_overrides[get_graph] = lambda: feedback_graph
+    client.app.dependency_overrides[get_db_session] = lambda: db
+    result = client.post(
+        "/api/v1/chat/stream" if streaming else "/api/v1/chat",
+        json={
+            "message": message,
+            "thread_id": THREAD_ID,
+            "user_id": USER_ID,
+            "execution_id": "not-the-server-id",
+        },
+        headers=HEADERS,
+    )
+    assert result.status_code == 200
+    if streaming:
+        done = next(block for block in result.text.split("\n\n") if block.startswith("event: done"))
+        execution_id = json.loads(done.split("data: ", 1)[1])["execution_id"]
+    else:
+        execution_id = result.json()["execution_id"]
+    uuid.UUID(execution_id)  # Lo emitió el tracker existente; no proviene del body.
+    before = db.get.await_count, db.execute.await_count
+    reloaded = _get(client).json()["messages"]
+    bots = [item for item in reloaded if item["role"] == "bot"]
+    assert len(bots) == 1 and bots[0]["execution_id"] == execution_id
+    assert before == (db.get.await_count, db.execute.await_count)

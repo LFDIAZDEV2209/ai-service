@@ -52,6 +52,35 @@ def _positive_text(value: str) -> str:
     )
 
 
+def _service_query(text: str) -> bool:
+    text = text.strip("¿?! .,;")
+    arithmetic = re.sub(r"^(?:cuanto es|calcula|calculate|what is|how much is)\s+", "", text)
+    arithmetic = re.sub(r"\s+(?:please|por favor)$", "", arithmetic)
+    arithmetic = re.sub(
+        r"\b(?:por|mas|menos|dividido entre|plus|minus|times|divided by)\b", "+", arithmetic
+    )
+    if re.search(r"\d", arithmetic) and re.fullmatch(r"[\d\s.,()+*/%=^\-]+", arithmetic):
+        return True
+    if re.fullmatch(
+        r"(?:hola|hello|hi|hey|buenos dias|buenas tardes|good morning|good evening)"
+        r"(?: vita)?[ ,.!]*(?:(?:como estas|how are you)(?: doing)?(?: hoy| today)?)?",
+        text,
+    ):
+        return True
+    if re.search(r"\b(quien eres|who are you|tu nombre|your name)\b", text):
+        return True
+    if re.match(r"^(?:gracias|thank you|thanks)\b", text) and not re.search(
+        r"\b(pero|but|ahora|now|also)\b", text
+    ):
+        return True
+    return bool(
+        re.search(r"\b(app|aplicacion|application)\b", text)
+        and re.search(
+            r"\b(ayuda|usar|uso|utilizar|abro|abrir|help|use|using|open|settings)\b", text
+        )
+    )
+
+
 async def select_agent(
     text: str,
     catalog: list[AuthorizedAgent],
@@ -71,6 +100,8 @@ async def select_agent(
     # Saludos/identidad no consultan un segundo modelo ni heredan especialista.
     if re.fullmatch(r"[\W]*(?:hola|hello|hi|hey|quien eres|who are you)[\W]*", normalized):
         return RouteDecision(None, "general")
+    if _service_query(normalized):
+        return RouteDecision(None, "service_fast_path")
     scored: list[tuple[int, AuthorizedAgent]] = []
     for agent in allowed:
         terms = [
@@ -90,14 +121,6 @@ async def select_agent(
     scored.sort(key=lambda item: (-item[0], item[1].id))
     if scored and (len(scored) == 1 or scored[0][0] > scored[1][0]):
         return RouteDecision(scored[0][1], "catalog_rule")
-    if not scored and re.search(
-        r"\b(hola|hello|hi|hey|buenos dias|buenas tardes|good morning|good evening|"
-        r"quien eres|who are you|tu nombre|your name|gracias|thank you|thanks|"
-        r"como (?:uso|utilizo|abro)|how (?:do|can) i (?:use|open)|ayuda (?:con|de) la app|"
-        r"help (?:with|using) the app)\b",
-        normalized,
-    ):
-        return RouteDecision(None, "service_fast_path")
     if (
         not scored
         and previous
@@ -109,7 +132,19 @@ async def select_agent(
         active = next((a for a in allowed if a.id == previous), None)
         if active:
             return RouteDecision(active, "continuity")
-    if classifier and len(scored) > 1:
+    nonliteral = (
+        not scored
+        and len(normalized.split()) >= 3
+        and bool(
+            re.search(
+                r"[¿?]|\b(me|mi|mis|tengo|siento|estoy|necesito|quiero|busco|quisiera|puedo|"
+                r"que|como|sobre|explica|explicame|orienta|my|i|feel|feeling|need|want|looking|"
+                r"about|explain|tell|what|how|why)\b",
+                normalized,
+            )
+        )
+    )
+    if classifier and allowed and (len(scored) > 1 or nonliteral):
         candidates = [a for _, a in scored] if scored else allowed
         selected = await classifier(text, candidates)
         active = next((a for a in candidates if a.id == selected), None)

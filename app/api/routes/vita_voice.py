@@ -134,7 +134,8 @@ async def completion(
         session_id, expiry = verify_context(x_vita_session, settings.vita_voice_context_secret)
         record = await voice_store.get(session_id)
         if (
-            record.conversation_id != x_vita_conversation
+            record.runtime_mode != "vita"
+            or record.conversation_id != x_vita_conversation
             or int(record.expires_at.timestamp()) != expiry
         ):
             raise VoiceContextError("voice_context_binding")
@@ -160,6 +161,7 @@ async def completion(
             "user_message_id": f"voice:{session_id}:{ordinal}:user",
             "assistant_message_id": receipt.response_message_id,
             "message_channel": "voice",
+            "voice_session_id": record.id,
         }
     )
     if receipt.status == "completed":

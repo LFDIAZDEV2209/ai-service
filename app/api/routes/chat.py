@@ -145,6 +145,23 @@ def _build_config(
     }
 
 
+def _is_vita_request(request: ChatRequest) -> bool:
+    return (
+        get_settings().vita_runtime_enabled
+        and request.supports_vita
+        and request.agent != "whatsapp"
+    )
+
+
+def _with_transcript_lock(graph):
+    if get_settings().vita_transcript_sync_enabled:
+        from app.vita.locking import LockedGraph
+
+        if not isinstance(graph, LockedGraph):
+            return LockedGraph(graph, "legacy")
+    return graph
+
+
 async def _resolve_graph(
     request: ChatRequest,
     session,
@@ -160,7 +177,7 @@ async def _resolve_graph(
     Returns:
         (graph, recursion_limit, version_id, provider, model)
     """
-    if get_settings().vita_runtime_enabled and request.agent != "whatsapp":
+    if _is_vita_request(request):
         from app.vita.client import VitaAccessError
         from app.vita.runtime import resolve_chat_turn
 
@@ -218,11 +235,9 @@ def _normalize_suggestions(raw: Any) -> list[ChatSuggestion]:
     return suggestions
 
 
-async def _bounded_stream(graph, inputs, *, config):
+async def _bounded_stream(graph, inputs, *, config, vita: bool = False):
     settings = get_settings()
-    timeout = (
-        settings.vita_turn_timeout if settings.vita_runtime_enabled else settings.llm_invoke_timeout
-    )
+    timeout = settings.vita_turn_timeout if vita else settings.llm_invoke_timeout
     stream = graph.astream(
         inputs,
         config=config,
@@ -233,8 +248,8 @@ async def _bounded_stream(graph, inputs, *, config):
             yield item
 
 
-def _log_execution_error(message: str) -> None:
-    if get_settings().vita_runtime_enabled:
+def _log_execution_error(message: str, *, vita: bool) -> None:
+    if vita:
         logger.error(message)
     else:
         logger.exception(message)
@@ -268,8 +283,9 @@ async def chat(
     )
     if graph is None:
         graph = base_graph
+    graph = _with_transcript_lock(graph)
 
-    tracker = ExecutionTracker(session, redact_content=get_settings().vita_runtime_enabled)
+    tracker = ExecutionTracker(session, redact_content=_is_vita_request(request))
     execution_id = await tracker.start(
         thread_id=thread_id,
         agent_type_id=request.agent_type_id or request.agent or "base",
@@ -281,6 +297,8 @@ async def chat(
         message=request.message,
     )
     started = time.perf_counter()
+    config = _build_config(thread_id, request, recursion_limit)
+    config["configurable"]["execution_id"] = execution_id
     try:
         result = await asyncio.wait_for(
             graph.ainvoke(
@@ -288,11 +306,11 @@ async def chat(
                     "input": request.message,
                     "agent": request.agent or request.agent_type_id or "base",
                 },
-                config=_build_config(thread_id, request, recursion_limit),
+                config=config,
             ),
             timeout=(
                 get_settings().vita_turn_timeout
-                if get_settings().vita_runtime_enabled
+                if _is_vita_request(request)
                 else get_settings().llm_invoke_timeout
             ),
         )
@@ -313,7 +331,7 @@ async def chat(
         await asyncio.shield(session.commit())
         raise
     except CoppAiError as exc:
-        _log_execution_error("Error ejecutando el grafo")
+        _log_execution_error("Error ejecutando el grafo", vita=_is_vita_request(request))
         await tracker.fail(
             execution_id,
             error=str(exc),
@@ -336,7 +354,9 @@ async def chat(
         # Cualquier error no tipado (p. ej. fallo de la API del LLM) debe
         # actualizar el estado de la ejecución y devolver un mensaje seguro,
         # no dejar la execution en RUNNING para siempre.
-        _log_execution_error("Error no controlado ejecutando el grafo")
+        _log_execution_error(
+            "Error no controlado ejecutando el grafo", vita=_is_vita_request(request)
+        )
         await tracker.fail(
             execution_id,
             error=str(exc),
@@ -447,8 +467,9 @@ async def chat_stream(
     )
     if graph is None:
         graph = base_graph
+    graph = _with_transcript_lock(graph)
 
-    tracker = ExecutionTracker(session, redact_content=get_settings().vita_runtime_enabled)
+    tracker = ExecutionTracker(session, redact_content=_is_vita_request(request))
     execution_id = await tracker.start(
         thread_id=thread_id,
         agent_type_id=request.agent_type_id or request.agent or "base",
@@ -474,12 +495,14 @@ async def chat_stream(
         running_tasks: dict[str, dict[str, Any]] = {}
         try:
             config = _build_config(thread_id, request, recursion_limit)
+            config["configurable"]["execution_id"] = execution_id
             agent_key = request.agent or request.agent_type_id or "base"
 
             async for mode, chunk in _bounded_stream(
                 graph,
                 {"input": request.message, "agent": agent_key},
                 config=config,
+                vita=_is_vita_request(request),
             ):
                 if mode == "values":
                     # Estado completo tras cada super-step; el último es el final.
@@ -567,7 +590,7 @@ async def chat_stream(
                         payload = json.dumps({"type": "flow", **entry}, ensure_ascii=False)
                         yield f"event: flow\ndata: {payload}\n\n"
         except Exception:
-            _log_execution_error("Error en el stream del agente")
+            _log_execution_error("Error en el stream del agente", vita=_is_vita_request(request))
             error = "No fue posible procesar la solicitud."
             payload = json.dumps({"type": "error", "error": error}, ensure_ascii=False)
             yield f"event: error\ndata: {payload}\n\n"

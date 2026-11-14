@@ -102,3 +102,27 @@ async def test_structured_classification_only_for_ambiguity_and_bounded_to_catal
     for greeting in ("Hola", "Hi", "¿Quién eres?"):
         assert (await select_agent(greeting, catalog, classifier=classifier)).agent is None
     assert classifier.await_count == 1
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Últimamente me siento desbordado y me cuesta dormir",
+        "Me desvelo 2 veces por semana y necesito orientación",
+    ],
+)
+async def test_nonliteral_personal_topic_uses_authorized_new_specialist_description(text):
+    specialist = agent("new-psy", "wellbeing-guide", [])
+    specialist.description = "Acompañamiento psicológico y bienestar emocional"
+    classifier = AsyncMock(return_value=specialist.id)
+    result = await select_agent(text, [specialist], classifier=classifier)
+    assert result.agent.id == specialist.id and result.reason == "structured_classifier"
+    classifier.assert_awaited_once_with(text, [specialist])
+    assert classifier.call_args.args[1][0].description == specialist.description
+
+
+@pytest.mark.parametrize("text", ["¿Cuánto es 12 por 7?", "What is 10 times 4 please?", "20 + 2"])
+async def test_simple_calculation_never_classifies(text, catalog):
+    classifier = AsyncMock()
+    assert (await select_agent(text, catalog, classifier=classifier)).agent is None
+    classifier.assert_not_called()
