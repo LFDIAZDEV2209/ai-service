@@ -262,6 +262,21 @@ async def test_only_language_tool_result_can_complete_a_provider_function_roundt
 
 
 @pytest.mark.parametrize(
+    "text,expected",
+    [
+        ('Using the document "Las heridas de la infancia", what are its main ideas?', "en"),
+        ("According to 'Mapa de la conciencia', what does the author explain?", "en"),
+        ("Responde en inglés", "en"),
+        ("Please speak in Spanish", "es"),
+    ],
+)
+def test_document_titles_and_explicit_preferences_do_not_break_bilingual_voice(text, expected):
+    from app.graph.language import detect_turn_language
+
+    assert detect_turn_language({"input": text}) == expected
+
+
+@pytest.mark.parametrize(
     "change", ["tamper", "expired", "wrong_conversation", "revoked", "wrong_service"]
 )
 async def test_invalid_context_is_rejected_before_runtime(rig, change):

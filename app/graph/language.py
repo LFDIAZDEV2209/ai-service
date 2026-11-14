@@ -116,6 +116,17 @@ _ES_MARKERS = frozenset(
 def detect_turn_language(state: AgentState) -> Literal["en", "es"] | None:
     """Devuelve un idioma claro; las señales mixtas o débiles conservan el de la app."""
     text = unicodedata.normalize("NFC", state.get("input", "")).lower()
+    # Un título citado en otro idioma no cambia el idioma de la conversación.
+    text = re.sub(
+        r'"[^"\n]{2,180}"|“[^”\n]{2,180}”|(?<!\w)\x27[^\x27\n]{2,180}\x27(?!\w)', " ", text
+    )
+    preference = re.search(
+        r"\b(?:h[aá]bla(?:me)?|responde(?:me)?|contesta(?:me)?|speak|answer|respond)\s+"
+        r"(?:(?:to me|en|in)\s+)*(ingl[eé]s|english|espanol|español|spanish)\b",
+        text,
+    )
+    if preference:
+        return "en" if preference[1] in {"ingles", "inglés", "english"} else "es"
     tokens = re.findall(r"[^\W\d_]+", text)
     if not tokens:
         return None
