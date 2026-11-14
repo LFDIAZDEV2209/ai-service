@@ -6,6 +6,71 @@
 
 # Configuración de los agentes ElevenLabs (FASE 6–10)
 
+## Configuración vigente: respuesta rápida sin citas (2026-11-14)
+
+Luis solicitó eliminar las ofertas de citas y reducir la espera al terminar de
+hablar. Aplicado directamente en ElevenLabs, sin desplegar código. Esta sección
+sustituye los valores de las secciones históricas siguientes.
+
+| Parámetro | Valor vigente en dev y prod |
+| --- | --- |
+| LLM | `gpt-4.1-mini`, sin razonamiento adicional |
+| Respuesta | Normalmente 1–2 frases; límite de 220 tokens; temperatura 0.4 |
+| Respaldo | Cascada después de 2 s, antes 4 s; respaldo del proveedor conservado |
+| Turnos | `turn_v3`, `eager`, `speculative_turn=true`; timeout de silencio 7 s conservado |
+| ASR | `scribe_realtime`, calidad alta, PCM 16 kHz; filtro de voces de fondo activado |
+| TTS | `eleven_v3_conversational`, voz `cgSgspJ2msm6clMCkdW9`, velocidad 1.05 |
+| Voz | Estabilidad 0.35 y similitud 0.72 conservadas; sin etiquetas de risas/suspiros sugeridas |
+| Espera excepcional | Una sola frase fija «Un momento.» a los 1.5 s; desactivada antes del primer mensaje del usuario |
+| Saludo ES | «Hola, soy Vita. ¿En qué te ayudo hoy?» |
+| Saludo EN | «Hello, I’m Vita. How can I help you today?» |
+| Herramientas | Sin herramientas enlazadas; las ocho definiciones antiguas de citas permanecen en el workspace para reversibilidad |
+| Idioma | Lo determina la sesión; sin herramienta `language_detection` que lo cambie conversacionalmente |
+
+El prompt limita el rol a ayuda con la app y educación general de bienestar.
+No ofrece citas, acciones de pantalla ni consultas personales que no puede
+ejecutar. Conserva identidad autenticada, confidencialidad, ausencia de
+diagnóstico/prescripción y orientación inmediata ante emergencias. Se verificó
+que los ajustes de privacidad de producción no cambiaron.
+
+Identidad Vita y versiones vigentes verificadas por GET el 14-11-2026:
+dev `agtvrsn_6901m7d6nk2hfnmrb43v24s39z2b`;
+prod `agtvrsn_7301m7d6nn7wf0fvjqr82tcjxwee`. Versiones anteriores para
+comparación o recuperación: dev `agtvrsn_9501m765g75ve66v0y505nftdngk`;
+prod `agtvrsn_9601m765g8nffxc9t4c3jwacbpnx`. Recuperar selectivamente los
+parámetros de rendimiento si hace falta; restaurar el prompt completo anterior
+volvería a ofrecer citas.
+
+Evidencia contra el proveedor real:
+
+- Dos consultas de texto comparables: antes 3.254/2.152 s, después
+  0.705/0.645 s en dev y 0.828/0.850 s en prod. Muestra pequeña, no percentiles.
+- Producción: cinco turnos ES y dos EN comprobaron saludo, alcance sin citas,
+  reconocimiento del límite de acceso a datos personales y orientación de emergencia.
+  Conversaciones sintéticas `conv_5101m7d4grwff939p3v1tpxfhjpv` y
+  `conv_6601m7d4grtyf6sb0ncgzb0w3aa5`.
+- Audio sintético PCM16k en español: transcripción exacta y primer audio
+  recibido 0.861 s después del envío de la frase completa
+  (`conv_4401m7d4mbsafq898474kx98qn9n`). Otra llamada registró en el proveedor
+  0.901 s desde silencio hasta audio, 0.160 s de detección de turno y
+  0.442 s hasta primer token del LLM (`conv_4601m7d4jpc8edz9y9ntc8h2abe7`).
+- Estas pruebas no incluyen micrófono, ruido real, reproducción ni red del teléfono.
+  La escucha de Luis en una sesión nueva sigue pendiente.
+
+El MCP se añadió a Codex y Luis completó OAuth contra el endpoint US; el CLI
+confirmó `Successfully logged in` y estado OAuth. La configuración remota se
+ajustó por REST con la credencial existente, porque las herramientas del MCP
+recién añadido no se incorporaron a esta sesión. No se copiaron credenciales.
+El CLI Postman instalado no reconoce `postman status`; las comprobaciones se
+hicieron con HTTP/WebSocket reales, sin atribuirlas a una ejecución de Postman.
+
+El endpoint actual del ai-service, con `VOICE_REVIEW_VERIFICATION_ENABLED=false`,
+emite la sesión contra la configuración remota sin modificar el saludo. No se
+alteraron los pins ni la política del modo de revisión: habilitarlo sigue
+requiriendo su proceso de aprobación independiente.
+
+## Historial previo al ajuste de 2026-11-14
+
 > **Alcance vigente de primera publicación:** leer
 > [VITA_PATIENT_SCOPE.md](../VITA_PATIENT_SCOPE.md) antes de configurar/desplegar.
 > Las referencias siguientes a prompt clínico, PATCH de idioma y E2E corresponden
