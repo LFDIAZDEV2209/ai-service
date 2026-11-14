@@ -51,9 +51,11 @@ Evidencia contra el proveedor real:
   española. Recursos de prueba eliminados. La prueba PCM anterior sin silencio final
   no cerraba el turno VAD y terminó por duración máxima; no fue un éxito ni un fallo
   de producción. Se corrigió el fixture con silencio acústico y deadline acotado.
-- Para activar `language_detection` se omitió el campo legado `tools: []`, que
-  sustituía las herramientas de sistema aun enviando `built_in_tools`. El GET
-  normalizado confirma una sola herramienta de sistema y cero de citas. El preset
+- Se omitió el campo obsoleto `tools: []` al configurar `built_in_tools`. Una prueba
+  A/B posterior confirmó que ambas formas registran la herramienta: su ausencia
+  no explica el fallo de idioma. La corrección cambia la instrucción fija y exige
+  detectar el idioma antes de responder. El GET confirma una sola herramienta de
+  sistema y cero de citas. El preset
   EN hereda el prompt bilingüe; no conserva una instrucción antigua de idioma fijo.
   ASR, TTS, voz, privacidad y los demás parámetros de turnos se mantuvieron.
 - La política/verificación por versiones ES/EN inmutables del modo de revisión es
