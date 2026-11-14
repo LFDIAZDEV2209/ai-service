@@ -42,6 +42,14 @@ class RouteDecision:
 
 Classifier = Callable[[str, list[AuthorizedAgent]], Awaitable[str | None]]
 
+# Traducciones de etiquetas del catálogo, nunca IDs ni una lista de agentes fija.
+# Especialistas nuevos siguen usando sus nombres/metadata y el clasificador acotado.
+_LABEL_TRANSLATIONS = (
+    {"psychology", "psicologia", "mental health", "salud mental"},
+    {"nutrition", "nutricion"},
+    {"medical", "medicine", "medicina"},
+)
+
 
 def _positive_text(value: str) -> str:
     # Evita que «no quiero nutrición, quiero ...» active el dominio negado.
@@ -111,8 +119,12 @@ async def select_agent(
             *agent.routing.topics,
             *agent.routing.keywords,
         ]
+        labels = set(map(normalize, [agent.specialty or "", agent.slug or "", agent.name]))
+        for translations in _LABEL_TRANSLATIONS:
+            if labels & translations:
+                terms.extend(translations)
         score = sum(
-            1
+            1 + min(len(term.split()) - 1, 2)
             for term in set(map(normalize, terms))
             if term and re.search(r"(?<!\w)" + re.escape(term) + r"(?!\w)", normalized)
         )

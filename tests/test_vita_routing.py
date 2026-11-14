@@ -73,6 +73,25 @@ async def test_channel_permission_cannot_be_expanded_by_name():
 @pytest.mark.parametrize(
     "text",
     [
+        "Según la documentación de psicología, explica las heridas de infancia",
+        "Using the psychology documents, explain the author's model",
+        "Quiero hablar de salud mental",
+    ],
+)
+async def test_actual_erp_labels_route_bilingually_without_metadata_or_extra_model(text):
+    mental = agent("published-mental", "psychology", [])
+    mental.name, mental.specialty = "Especialista en Salud Mental", "salud mental"
+    medical = agent("published-health", "medical", [])
+    medical.name, medical.specialty = "Especialista en Salud", "salud"
+    classifier = AsyncMock(return_value=None)
+    decision = await select_agent(text, [mental, medical], classifier=classifier)
+    assert decision.agent.id == mental.id and decision.reason == "catalog_rule"
+    classifier.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
         "Hola Vita cómo estás hoy",
         "Hello Vita how are you doing today?",
         "Cuéntame quién eres y cómo puedes ayudarme",
