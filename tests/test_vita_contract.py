@@ -117,7 +117,10 @@ async def test_model_cannot_choose_identity_or_date(args, backend):
 @pytest.mark.parametrize("status", ["empty", "unavailable", "forbidden", "stale"])
 async def test_backend_states_are_preserved_and_cannot_offer_actions(status, backend):
     install, _ = backend
-    install(envelope(status=status))
+    install(
+        envelope(status=status),
+        {"empty": 200, "unavailable": 503, "forbidden": 403, "stale": 409}[status],
+    )
     result = await read_context("nutrition", "a")
     assert result.status == status
     assert result.actions == []
@@ -128,8 +131,42 @@ async def test_backend_states_are_preserved_and_cannot_offer_actions(status, bac
 )
 async def test_http_failures_are_not_misrepresented_as_no_plan(code, expected, backend):
     install, _ = backend
-    install({}, code)
+    install(envelope(status="forbidden") if code == 403 else {}, code)
     assert (await read_context("nutrition", "a")).status == expected
+
+
+@pytest.mark.parametrize("code,status", [(200, "stale"), (409, "ok"), (503, "ok"), (403, "ok")])
+async def test_incoherent_http_envelope_cannot_supply_facts_or_actions(code, status, backend):
+    install, _ = backend
+    install(envelope(status=status), code)
+    result = await read_context("day", "a")
+    assert result.status == "unavailable"
+    assert result.data is None and result.actions == [] and result.sources == []
+
+
+async def test_valid_stale_409_is_preserved_without_previous_data(backend):
+    install, _ = backend
+    install(envelope(status="stale", data={"prior": "must not be used"}), 409)
+    result = await read_context("exercise", "a")
+    assert result.status == "stale" and result.resource_version == "rev-a"
+    assert result.data is None and result.actions == [] and result.sources == []
+
+
+@pytest.mark.parametrize("code", [403, 409, 503])
+async def test_arbitrary_error_body_is_not_a_capability_envelope(code, backend):
+    install, _ = backend
+    install({"status": code, "title": "ProblemDetails", "data": {"secret": "not facts"}}, code)
+    result = await read_context("day", "a")
+    assert result.status == "unavailable"
+    assert result.data is None and result.actions == []
+
+
+async def test_empty_200_preserves_pending_review_without_draft_or_action(backend):
+    install, _ = backend
+    install(envelope(status="empty", data={"availability": "pending_review"}), 200)
+    result = await read_context("nutrition", "a")
+    assert result.status == "empty"
+    assert result.data == {"availability": "pending_review"} and result.actions == []
 
 
 async def test_arbitrary_navigation_url_is_rejected(backend):

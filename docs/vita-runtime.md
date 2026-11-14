@@ -43,7 +43,10 @@ fecha o paciente enviados por el modelo se rechazan antes de ejecutar. Sin ident
 no hay consulta. No se leen schemas de planes ni se calculan vigencia, nutrición o XP.
 
 Se conservan `ok/empty/unavailable/forbidden/stale`, fecha local, revisión, datos,
-acciones y procedencia del envelope BACK. 404 de una fachada inexistente es
+acciones y procedencia del envelope BACK v1.1. Se exige coherencia HTTP: ok/empty
+200, forbidden 403, unavailable 503, stale 409. Error arbitrario o envelope incoherente
+no se acepta como datos/acciones. Stale descarta contenido previo; empty conserva
+availability del workflow, incluido pending_review. 404 de una fachada inexistente es
 `unavailable`, no prueba de ausencia de plan. Se rechazan acciones con URL/destino
 arbitrario y respuestas mayores a 64 KB; los estados no `ok` no emiten acciones.
 Timeout HTTP total por lectura: 3 s por defecto. No hay reintentos automáticos.
@@ -160,7 +163,8 @@ El tiempo `first_token_ms` comienza al entrar al endpoint e incluye su resoluci�
 Bloqueo `SELECT FOR UPDATE` de sesión y unicidad `(session_id, ordinal)`/contador;
 advisory lock transaccional por hilo para texto/voz entre conexiones/réplicas. Todo
 ello requiere PostgreSQL, no un dict de proceso. Migración nueva `fe62a09c1741`, solo
-schema `ai`. **No se aplicó a la BD compartida ni se verificaron réplicas reales.**
+schema `ai`. No se aplicó a la BD compartida. Repositorios/conexiones reales y
+upgrade/rollback se verificaron después en una BD aislada (evidencia abajo).
 
 ## Evidencia y límites de integración
 
@@ -172,9 +176,10 @@ ajena, revocación en vuelo, cabeceras, replay y frases iguales distintas.
 
 `tests/test_vita_postgres.py` es opt-in: exige `VITA_TEST_DATABASE_URL` de una DB local
 aislada cuyo nombre contenga `test`. Crea/retira un schema temporal solo allí; prueba
-dos repositorios/conexiones, revocación, recibos y advisory lock. Sin esa variable
-queda skipped: **migración y concurrencia durable continúan pendientes de integración**.
-Los SQL de upgrade/rollback se exportaron offline, sin ejecutar sobre ninguna BD.
+dos repositorios/conexiones, revocación, recibos y advisory lock. Incluye aplicación y
+rollback reales de la revisión de voz sobre baseline sintética aislada. Sin esa
+variable quedan skipped; no se utiliza la BD compartida para completar estos checks.
+Los SQL versionados son exportaciones offline; su ejecución aislada se acredita abajo.
 
 Contrato local reusable: `docs/contracts/vita-ai.openapi.json`, más SQL offline.
 Reproducir: `uv run python scripts/export_vita_contract.py`. No se inicializó/publicó
@@ -193,14 +198,15 @@ heard/final ni de correspondencia con event_id/response_id del SDK**. APP no deb
 fusionar esos IDs por inferencia ni volver a enviar la transcripción como otra pregunta.
 Correcciones y texto realmente escuchado requieren correlación/interrupción verificadas.
 No se cierra aceptación 4.2/4.4/4.5 ni QA integral por haber probado el transporte.
-Modo Vita permanece apagado hasta migración, integración BACK/APP y esas verificaciones.
+Modo Vita permanece apagado hasta aplicar migración en el destino, integrar BACK/APP
+y verificar correlación/interrupción/audio.
 
 ## Cierre de validación local (14-11-2026)
 
 - `uv sync --locked`: dependencias del lock instaladas, sin actualizar `uv.lock`.
 - `uv run ruff check .`: correcto.
-- `uv run pytest -q`: **623 passed, 1 skipped**, 27.80 s. El skip corresponde al
-  PostgreSQL opt-in descrito arriba. 32 warnings existentes: deprecación Starlette/
+- `uv run pytest -q`: **633 passed, 2 skipped**, 28.12 s. Los skips corresponden a
+  los dos tests PostgreSQL opt-in, ejecutados aparte con éxito. 32 warnings existentes: deprecación Starlette/
   httpx y `FakeDbSession.add` asíncrono del doble legado; no fallos de producto.
 - `uv run pytest tests/test_vita_voice.py -k first_final_token -q`: 1 passed;
   primer contenido HTTP ASGI antes de liberar el final de la generación sintética.
@@ -211,3 +217,31 @@ Modo Vita permanece apagado hasta migración, integración BACK/APP y esas verif
 
 Root integrará/pusheará a dev según la autorización de Luis, verificará CI y
 despliegues. Este carril entrega únicamente commits locales y handoff.
+
+## PostgreSQL real autorizado para el cierre
+
+Root/BACK habilitó un cluster temporal PostgreSQL 18.6, loopback puerto 55437,
+separado de la BD compartida. El wrapper de BACK
+`scripts/vita/Invoke-VitaAiPostgresTests.ps1 -AiWorktree <vita-ai>` comprueba datadir,
+crea una DB con UUID exclusivo y la elimina al terminar, sin imprimir su URI.
+
+El primer intento de root falló por `ProactorEventLoop` en Windows, antes de las
+aserciones. pytest-asyncio 1.4.0 usa Runner/loop_factory y no basta cambiar la policy
+del proceso. Hook de tests `pytest_asyncio_loop_factories`: Selector solo para
+`test_vita_postgres.py` en Windows; los demás conservan `asyncio.new_event_loop`.
+No se modificó runtime ni configuración Linux ni se relajaron aserciones.
+
+Ejecución real tras el arreglo: **2 passed, 3 warnings, 1.60 s**. Acredita competencia
+entre dos repositorios/conexiones, un recibo para el mismo turno, replay sin nueva
+generación, siguiente ordinal, rechazo de propietario ajeno, revocación compartida,
+advisory lock/liberación y migración `fe62a09c1741` + rollback reales en DB descartable.
+Tres warnings de Alembic por `path_separator` legado. El wrapper confirmó limpieza.
+Log local protegido: `%TEMP%/vita-ai-postgres-c3f9a72ef59e4cbcaafdd08731253ecf.log`.
+No acredita despliegue en varias réplicas de producción ni audio móvil.
+
+En la revisión final se corrigió además la consulta de embeddings de
+`PgVectorRetriever`: usa `aembed_query` del SDK OpenAI existente. El loop ya no queda
+bloqueado por la variante síncrona durante RAG. Providers síncronos inyectados de
+compatibilidad se ejecutan en thread; los providers propios tienen método async.
+Regresión local: cancelación llega al proveedor async y no se inicia consulta SQL
+ni se utiliza un resultado tardío. No se llamaron APIs reales de embeddings.

@@ -52,6 +52,10 @@ class OpenAIEmbeddingsProvider:
     def embed_query(self, text: str) -> list[float]:
         return self._embeddings.embed_query(text)
 
+    async def aembed_query(self, text: str) -> list[float]:
+        """El retriever async debe poder cancelar el HTTP del proveedor."""
+        return await self._embeddings.aembed_query(text)
+
 
 class HashEmbeddingsProvider:
     """Embeddings deterministas sin API key — SOLO desarrollo y tests.
@@ -82,6 +86,9 @@ class HashEmbeddingsProvider:
         return [self._embed(t) for t in texts]
 
     def embed_query(self, text: str) -> list[float]:
+        return self._embed(text)
+
+    async def aembed_query(self, text: str) -> list[float]:
         return self._embed(text)
 
 

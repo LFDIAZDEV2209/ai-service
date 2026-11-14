@@ -6,7 +6,9 @@ completo del grafo sin necesidad de API keys.
 
 from __future__ import annotations
 
+import asyncio
 import os
+import sys
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -29,6 +31,20 @@ os.environ.setdefault("INTERNAL_API_KEY", "test-internal-key")
 os.environ.setdefault("AUTO_MIGRATE", "false")
 
 SIMPLE_ANSWER = "¡Hola! Soy CoppAI. ¿En qué te ayudo?"
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_asyncio_loop_factories(item):
+    """pytest-asyncio 1.4 usa Runner/loop_factory, no la policy del proceso.
+
+    Solo la integración psycopg de Vita en Windows necesita Selector. El resto
+    de la suite y Linux conservan su loop por defecto.
+    """
+    if sys.platform == "win32" and item.path.name == "test_vita_postgres.py":
+        return {"vita_psycopg_selector": asyncio.SelectorEventLoop}
+    # Si el hook está registrado, pytest-asyncio 1.4 exige mapping también
+    # para los demás items; new_event_loop conserva su factory/policy normal.
+    return {"default": asyncio.new_event_loop}
 
 
 @pytest.fixture

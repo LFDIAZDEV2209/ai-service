@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -81,7 +82,12 @@ class PgVectorRetriever:
             return []
         settings = get_settings()
         top_k = top_k or settings.rag_top_k
-        query_vector = self.embeddings.embed_query(query)
+        async_query = getattr(self.embeddings, "aembed_query", None)
+        query_vector = (
+            await async_query(query)
+            if async_query is not None
+            else await asyncio.to_thread(self.embeddings.embed_query, query)
+        )
         results = await PgVectorStore(session).search(
             query_vector,
             top_k,
