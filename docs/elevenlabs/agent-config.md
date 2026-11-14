@@ -21,11 +21,11 @@ sustituye los valores de las secciones históricas siguientes.
 | ASR | `scribe_realtime`, calidad alta, PCM 16 kHz; filtro de voces de fondo activado |
 | TTS | `eleven_v3_conversational`, voz `cgSgspJ2msm6clMCkdW9`, velocidad 1.05 |
 | Voz | Estabilidad 0.35 y similitud 0.72 conservadas; sin etiquetas de risas/suspiros sugeridas |
-| Espera excepcional | Una sola frase fija «Un momento.» a los 1.5 s; desactivada antes del primer mensaje del usuario |
+| Espera excepcional | Filler hablado desactivado (`timeout_seconds=-1`): evita que «Un momento» se anteponga en español al cambiar a inglés |
 | Saludo ES | «Hola, soy Vita. ¿En qué te ayudo hoy?» |
 | Saludo EN | «Hello, I’m Vita. How can I help you today?» |
-| Herramientas | Sin herramientas enlazadas; las ocho definiciones antiguas de citas permanecen en el workspace para reversibilidad |
-| Idioma | Lo determina la sesión; sin herramienta `language_detection` que lo cambie conversacionalmente |
+| Herramientas | Solo sistema `language_detection` ES/EN; sin herramientas de citas ni nuevas escrituras |
+| Idioma | Último mensaje claro del paciente: español o inglés, con cambios en la misma llamada; palabras neutras conservan el anterior |
 
 El prompt limita el rol a ayuda con la app y educación general de bienestar.
 No ofrece citas, acciones de pantalla ni consultas personales que no puede
@@ -33,15 +33,32 @@ ejecutar. Conserva identidad autenticada, confidencialidad, ausencia de
 diagnóstico/prescripción y orientación inmediata ante emergencias. Se verificó
 que los ajustes de privacidad de producción no cambiaron.
 
-Identidad Vita y versiones vigentes verificadas por GET el 14-11-2026:
-dev `agtvrsn_6901m7d6nk2hfnmrb43v24s39z2b`;
-prod `agtvrsn_7301m7d6nn7wf0fvjqr82tcjxwee`. Versiones anteriores para
+Identidad Vita y versiones bilingües verificadas por GET el 14-11-2026:
+dev `agtvrsn_0301m7dr98t8eyet23d6zasqmpff`;
+prod `agtvrsn_7801m7dr9c49fh3ssrz0kd8cbasx`. Versiones previas con idioma fijo:
+dev `agtvrsn_6901m7d6nk2hfnmrb43v24s39z2b`,
+prod `agtvrsn_7301m7d6nn7wf0fvjqr82tcjxwee`. Otras versiones para
 comparación o recuperación: dev `agtvrsn_9501m765g75ve66v0y505nftdngk`;
 prod `agtvrsn_9601m765g8nffxc9t4c3jwacbpnx`. Recuperar selectivamente los
 parámetros de rendimiento si hace falta; restaurar el prompt completo anterior
 volvería a ofrecer citas.
 
 Evidencia contra el proveedor real:
+
+- Cambio pedido después por Luis: bilingüe según la voz, no idioma fijo de la app.
+  Prueba sintética en la misma sesión EN→ES→EN correcta; otra con PCM16k real
+  verificó transcripción inglesa/respuesta inglesa y transcripción española/respuesta
+  española. Recursos de prueba eliminados. La prueba PCM anterior sin silencio final
+  no cerraba el turno VAD y terminó por duración máxima; no fue un éxito ni un fallo
+  de producción. Se corrigió el fixture con silencio acústico y deadline acotado.
+- Para activar `language_detection` se omitió el campo legado `tools: []`, que
+  sustituía las herramientas de sistema aun enviando `built_in_tools`. El GET
+  normalizado confirma una sola herramienta de sistema y cero de citas. El preset
+  EN hereda el prompt bilingüe; no conserva una instrucción antigua de idioma fijo.
+  ASR, TTS, voz, privacidad y los demás parámetros de turnos se mantuvieron.
+- La política/verificación por versiones ES/EN inmutables del modo de revisión es
+  un recorrido distinto, actualmente apagado. No activar esa verificación sin
+  generar y validar sus versiones conforme al requisito bilingüe actualizado.
 
 - Dos consultas de texto comparables: antes 3.254/2.152 s, después
   0.705/0.645 s en dev y 0.828/0.850 s en prod. Muestra pequeña, no percentiles.
